@@ -46,8 +46,18 @@ function normalizeOrderRow_(row) {
     totalRevenue: Number(row[5] || 0),
     totalCost: Number(row[6] || 0),
     profit: Number(row[7] || 0),
-    transferPaid: row[8] === true || String(row[8]).toLowerCase() === 'true' || String(row[8]).toLowerCase() === 'yes'
+    transferPaid: isTransferPaid_(row[8])
   };
+}
+
+function isTransferPaid_(value) {
+  const normalized = String(value).toLowerCase();
+  return value === true || normalized === 'true' || normalized === 'yes';
+}
+
+function orderTimestamp_(value) {
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 function listItems_() {
@@ -95,6 +105,38 @@ function listOrders_() {
   }
 
   return values.slice(1).filter((row) => row[0] || row[1]).map(normalizeOrderRow_);
+}
+
+function listOrdersPage_(filter = {}) {
+  const sheet = ensureSheet_(SHEET_NAMES.orders);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid']);
+
+  const values = sheet.getDataRange().getValues();
+  const paymentFilter = filter.paymentFilter || 'all';
+  const matchingRows = values.slice(1).filter((row) => {
+    if (!(row[0] || row[1])) return false;
+    if (paymentFilter === 'paid') return isTransferPaid_(row[8]);
+    if (paymentFilter === 'unpaid') return !isTransferPaid_(row[8]);
+    return true;
+  });
+
+  matchingRows.sort((left, right) => (
+    orderTimestamp_(right[3]) - orderTimestamp_(left[3]) ||
+    String(right[0]).localeCompare(String(left[0]))
+  ));
+
+  const pageSize = Math.min(10, Math.max(1, Number(filter.pageSize) || 10));
+  const total = matchingRows.length;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(Math.max(1, Number(filter.page) || 1), pageCount);
+  const start = (page - 1) * pageSize;
+
+  return {
+    orders: matchingRows.slice(start, start + pageSize).map(normalizeOrderRow_),
+    page,
+    pageSize,
+    total
+  };
 }
 
 function saveOrder_(order) {
@@ -172,7 +214,28 @@ function getStats_(filter = {}) {
     { revenue: 0, cost: 0, profit: 0, orders: 0 }
   );
 
-  return totals;
+  const itemTotals = new Map();
+  const customerTotals = new Map();
+  filtered.forEach((order) => {
+    const customerName = order.customerName || 'Chưa rõ';
+    customerTotals.set(customerName, (customerTotals.get(customerName) || 0) + Number(order.totalRevenue || 0));
+    (order.items || []).forEach((item) => {
+      const itemName = item.name || 'Chưa rõ';
+      const revenue = Number(item.quantity || 0) * Number(item.sellingPrice || 0);
+      itemTotals.set(itemName, (itemTotals.get(itemName) || 0) + revenue);
+    });
+  });
+
+  const topEntries = (totalsByName) => [...totalsByName.entries()]
+    .map(([name, value]) => ({ name, value }))
+    .sort((left, right) => right.value - left.value)
+    .slice(0, 8);
+
+  return {
+    ...totals,
+    items: topEntries(itemTotals),
+    customers: topEntries(customerTotals)
+  };
 }
 
 function doPost(e) {
@@ -192,6 +255,9 @@ function doPost(e) {
         break;
       case 'listOrders':
         data = listOrders_();
+        break;
+      case 'listOrdersPage':
+        data = listOrdersPage_(payload || {});
         break;
       case 'saveOrder':
         data = saveOrder_(payload.order || payload);

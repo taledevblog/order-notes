@@ -7,7 +7,9 @@ const state = {
   editingOrderId: null,
   activeBillId: null,
   busyCount: 0,
-  ordersPage: 1
+  ordersPage: 1,
+  ordersTotal: 0,
+  ordersFromSheets: false
 };
 
 const ORDERS_PER_PAGE = 10;
@@ -84,8 +86,12 @@ function bindEvents() {
   el.addOrderItem.addEventListener('click', addOrderItemToCart);
   el.syncButton.addEventListener('click', loadData);
   el.paymentFilter.addEventListener('change', () => {
-    state.ordersPage = 1;
-    renderOrdersList();
+    if (state.ordersFromSheets) {
+      loadOrdersPage(1);
+    } else {
+      state.ordersPage = 1;
+      renderOrdersList();
+    }
   });
   el.ordersPrev.addEventListener('click', () => changeOrdersPage(-1));
   el.ordersNext.addEventListener('click', () => changeOrdersPage(1));
@@ -112,47 +118,103 @@ function hydrateDateInputs() {
 function switchTab(targetId) {
   el.tabButtons.forEach((button) => button.classList.toggle('active', button.dataset.target === targetId));
   el.tabPanes.forEach((pane) => pane.classList.toggle('active', pane.id === targetId));
+  if (targetId === 'stats-section') renderStats();
 }
 
 async function loadData() {
   await beginBusy('Đang tải dữ liệu...');
   try {
     if (config.useGoogleSheets && config.scriptUrl && !config.scriptUrl.includes('PASTE')) {
-      const [itemsResponse, ordersResponse] = await Promise.all([
+      const [itemsResponse, ordersPageResponse] = await Promise.all([
         callSheetAction('listItems'),
-        callSheetAction('listOrders')
+        callSheetAction('listOrdersPage', {
+          page: 1,
+          pageSize: ORDERS_PER_PAGE,
+          paymentFilter: el.paymentFilter.value
+        })
       ]);
 
+      const ordersPage = ordersPageResponse.data;
+      if (!ordersPage || !Array.isArray(ordersPage.orders) || !Number.isFinite(Number(ordersPage.total))) {
+        throw new Error('ORDER_PAGINATION_UNAVAILABLE');
+      }
       state.items = itemsResponse.data || [];
-      state.orders = ordersResponse.data || [];
-      persistLocalDemoData();
+      state.orders = ordersPage.orders;
+      state.ordersTotal = Number(ordersPage.total);
+      state.ordersPage = Number(ordersPage.page) || 1;
+      state.ordersFromSheets = true;
     } else {
       const saved = localStorage.getItem('order-notes-demo');
       const parsed = saved ? JSON.parse(saved) : { items: [], orders: [] };
       state.items = parsed.items || [];
       state.orders = parsed.orders || [];
+      state.ordersTotal = state.orders.length;
+      state.ordersPage = 1;
+      state.ordersFromSheets = false;
     }
 
     renderItemOptions();
     renderItemsTable();
     renderOrdersList();
-    renderStats();
     showToast('Dữ liệu đã được tải.');
   } catch (error) {
     console.error(error);
     if (config.useGoogleSheets) {
       config.useGoogleSheets = false;
-      showToast('Không thể kết nối Google Sheets. Đang dùng dữ liệu lưu trên thiết bị này.');
+      state.ordersFromSheets = false;
+      showToast(error.message === 'ORDER_PAGINATION_UNAVAILABLE'
+        ? 'Apps Script cần cập nhật để phân trang note. Đang dùng dữ liệu trên thiết bị này.'
+        : 'Không thể kết nối Google Sheets. Đang dùng dữ liệu lưu trên thiết bị này.');
     }
 
     const saved = localStorage.getItem('order-notes-demo');
     const parsed = saved ? JSON.parse(saved) : { items: [], orders: [] };
     state.items = parsed.items || [];
     state.orders = parsed.orders || [];
+    state.ordersTotal = state.orders.length;
+    state.ordersPage = 1;
+    state.ordersFromSheets = false;
     renderItemOptions();
     renderItemsTable();
     renderOrdersList();
-    renderStats();
+  } finally {
+    endBusy();
+  }
+}
+
+async function fetchOrdersPage(page) {
+  const response = await callSheetAction('listOrdersPage', {
+    page,
+    pageSize: ORDERS_PER_PAGE,
+    paymentFilter: el.paymentFilter.value
+  });
+  const result = response.data;
+  if (!result || !Array.isArray(result.orders) || !Number.isFinite(Number(result.total))) {
+    throw new Error('ORDER_PAGINATION_UNAVAILABLE');
+  }
+
+  state.orders = result.orders;
+  state.ordersTotal = Number(result.total);
+  state.ordersPage = Number(result.page) || page;
+  state.ordersFromSheets = true;
+  renderOrdersList();
+}
+
+async function loadOrdersPage(page) {
+  if (!state.ordersFromSheets) {
+    state.ordersPage = page;
+    renderOrdersList();
+    return;
+  }
+
+  await beginBusy('Đang tải note...');
+  try {
+    await fetchOrdersPage(page);
+  } catch (error) {
+    console.error(error);
+    showToast(error.message === 'ORDER_PAGINATION_UNAVAILABLE'
+      ? 'Apps Script chưa hỗ trợ phân trang. Hãy triển khai phiên bản mới.'
+      : 'Không thể tải trang note này.');
   } finally {
     endBusy();
   }
@@ -171,6 +233,7 @@ function endBusy() {
 }
 
 function persistLocalDemoData() {
+  if (state.ordersFromSheets) return;
   localStorage.setItem('order-notes-demo', JSON.stringify({ items: state.items, orders: state.orders }));
 }
 
@@ -419,37 +482,54 @@ async function saveOrder(event) {
     profit: state.cart.reduce((sum, item) => sum + item.quantity * (item.sellingPrice - item.cost), 0)
   };
 
+  const wasRemote = state.ordersFromSheets;
+  const wasEditing = Boolean(state.editingOrderId);
   await beginBusy(state.editingOrderId ? 'Đang cập nhật note...' : 'Đang lưu note...');
   try {
-    if (config.useGoogleSheets && config.scriptUrl && !config.scriptUrl.includes('PASTE')) {
+    let listRefreshFailed = false;
+    if (wasRemote) {
       await callSheetAction('saveOrder', { order });
+      const targetPage = state.editingOrderId ? state.ordersPage : 1;
+      try {
+        await fetchOrdersPage(targetPage);
+      } catch (error) {
+        console.error(error);
+        listRefreshFailed = true;
+      }
+    } else {
+      const existingIndex = state.orders.findIndex((entry) => entry.id === order.id);
+      if (existingIndex >= 0) {
+        state.orders[existingIndex] = order;
+      } else {
+        state.orders.push(order);
+      }
+      state.ordersPage = 1;
+      persistLocalDemoData();
+      renderOrdersList();
     }
 
-    const existingIndex = state.orders.findIndex((entry) => entry.id === order.id);
-    if (existingIndex >= 0) {
-      state.orders[existingIndex] = order;
-    } else {
-      state.orders.push(order);
-      state.ordersPage = 1;
-    }
-    persistLocalDemoData();
     state.cart = [];
     state.editingOrderId = null;
     renderCart();
-    renderOrdersList();
-    renderStats();
     el.orderForm.reset();
     resetOrderEditControls();
     hydrateDateInputs();
-    showToast(existingIndex >= 0 ? 'Đã cập nhật note bán hàng.' : 'Đã lưu note bán hàng.');
+    showToast(listRefreshFailed
+      ? 'Đã lưu note nhưng chưa tải lại danh sách. Hãy bấm Đồng bộ dữ liệu.'
+      : wasRemote && wasEditing
+        ? 'Đã cập nhật note bán hàng.'
+        : 'Đã lưu note bán hàng.');
   } catch (error) {
     console.error(error);
+    if (wasRemote) {
+      showToast('Không thể lưu note lên Google Sheets. Thông tin vẫn còn trên form.');
+      return;
+    }
+
     if (config.useGoogleSheets) {
       config.useGoogleSheets = false;
-      showToast('Không thể đồng bộ Google Sheets. Note được lưu trên thiết bị.');
-    } else {
-      showToast('Không thể lưu note bán hàng.');
     }
+    showToast('Không thể lưu note bán hàng.');
 
     const existingIndex = state.orders.findIndex((entry) => entry.id === order.id);
     if (existingIndex >= 0) {
@@ -476,23 +556,34 @@ async function deleteOrder(orderId) {
   const order = state.orders.find((entry) => entry.id === orderId);
   if (!order || !window.confirm(`Bạn có chắc muốn xóa note của "${order.customerName}" không?`)) return;
 
+  const wasRemote = state.ordersFromSheets;
+  let deletedRemotely = false;
   await beginBusy('Đang xóa note bán hàng...');
   try {
-    if (config.useGoogleSheets && config.scriptUrl && !config.scriptUrl.includes('PASTE')) {
+    if (wasRemote) {
       const result = await callSheetAction('deleteOrder', { orderId });
       if (!result.data || !result.data.deleted) {
         throw new Error('Google Sheets không tìm thấy note cần xóa.');
       }
+      deletedRemotely = true;
+      await fetchOrdersPage(state.ordersPage);
+    } else {
+      state.orders = state.orders.filter((entry) => entry.id !== orderId);
+      persistLocalDemoData();
+      renderOrdersList();
     }
 
-    state.orders = state.orders.filter((entry) => entry.id !== orderId);
-    persistLocalDemoData();
-    renderOrdersList();
-    renderStats();
     showToast('Đã xóa note bán hàng.');
   } catch (error) {
     console.error(error);
-    showToast('Không thể xóa note trên Google Sheets. Note vẫn được giữ lại.');
+    if (deletedRemotely) {
+      state.orders = state.orders.filter((entry) => entry.id !== orderId);
+      state.ordersTotal = Math.max(0, state.ordersTotal - 1);
+      renderOrdersList();
+      showToast('Đã xóa note nhưng chưa tải lại trang. Hãy bấm Đồng bộ dữ liệu.');
+    } else {
+      showToast('Không thể xóa note trên Google Sheets. Note vẫn được giữ lại.');
+    }
   } finally {
     endBusy();
   }
@@ -501,21 +592,19 @@ async function deleteOrder(orderId) {
 function renderOrdersList() {
   el.ordersList.innerHTML = '';
 
-  const filteredOrders = state.orders.filter((order) => {
-    if (el.paymentFilter.value === 'paid') return isTransferPaid(order);
-    if (el.paymentFilter.value === 'unpaid') return !isTransferPaid(order);
-    return true;
-  });
-
+  const filteredOrders = state.ordersFromSheets
+    ? [...state.orders]
+    : state.orders.filter((order) => matchesPaymentFilter(order));
   const sortedOrders = filteredOrders.sort((left, right) => {
     const leftTime = Date.parse(left.orderedAt || '') || 0;
     const rightTime = Date.parse(right.orderedAt || '') || 0;
     return rightTime - leftTime || String(right.id).localeCompare(String(left.id));
   });
-  const pageCount = Math.max(1, Math.ceil(sortedOrders.length / ORDERS_PER_PAGE));
+  const totalOrders = state.ordersFromSheets ? state.ordersTotal : sortedOrders.length;
+  const pageCount = Math.max(1, Math.ceil(totalOrders / ORDERS_PER_PAGE));
   state.ordersPage = Math.min(Math.max(state.ordersPage, 1), pageCount);
-  el.ordersPagination.hidden = sortedOrders.length <= ORDERS_PER_PAGE;
-  el.ordersPageInfo.textContent = `Trang ${state.ordersPage}/${pageCount} · ${sortedOrders.length} note`;
+  el.ordersPagination.hidden = totalOrders <= ORDERS_PER_PAGE;
+  el.ordersPageInfo.textContent = `Trang ${state.ordersPage}/${pageCount} · ${totalOrders} note`;
   el.ordersPrev.disabled = state.ordersPage === 1;
   el.ordersNext.disabled = state.ordersPage === pageCount;
 
@@ -525,7 +614,10 @@ function renderOrdersList() {
   }
 
   const pageStart = (state.ordersPage - 1) * ORDERS_PER_PAGE;
-  sortedOrders.slice(pageStart, pageStart + ORDERS_PER_PAGE).forEach((order) => {
+  const pageOrders = state.ordersFromSheets
+    ? sortedOrders
+    : sortedOrders.slice(pageStart, pageStart + ORDERS_PER_PAGE);
+  pageOrders.forEach((order) => {
     const card = document.createElement('div');
     card.className = 'order-card';
     const orderDate = new Date(order.orderedAt);
@@ -574,8 +666,13 @@ function renderOrdersList() {
 }
 
 function changeOrdersPage(direction) {
-  state.ordersPage += direction;
-  renderOrdersList();
+  loadOrdersPage(state.ordersPage + direction);
+}
+
+function matchesPaymentFilter(order) {
+  if (el.paymentFilter.value === 'paid') return isTransferPaid(order);
+  if (el.paymentFilter.value === 'unpaid') return !isTransferPaid(order);
+  return true;
 }
 
 function showBill(orderId) {
@@ -890,30 +987,53 @@ function updateStatsInputType() {
   }
 }
 
-function renderStats() {
+async function renderStats() {
   const range = el.statsRange.value;
   const filterValue = el.statsDate.value;
+
+  if (state.ordersFromSheets) {
+    await beginBusy('Đang tải thống kê...');
+    try {
+      const response = await callSheetAction('getStats', { range, value: filterValue });
+      renderStatsSummary(response.data || {});
+    } catch (error) {
+      console.error(error);
+      showToast('Không thể tải thống kê từ Google Sheets.');
+    } finally {
+      endBusy();
+    }
+    return;
+  }
+
   const filteredOrders = state.orders.filter((order) => matchesRange(order.orderedAt, range, filterValue));
 
   const totalRevenue = filteredOrders.reduce((sum, order) => sum + Number(order.totalRevenue || 0), 0);
   const totalCost = filteredOrders.reduce((sum, order) => sum + Number(order.totalCost || 0), 0);
   const totalProfit = filteredOrders.reduce((sum, order) => sum + Number(order.profit || 0), 0);
 
-  el.statRevenue.textContent = moneyFormatter.format(totalRevenue);
-  el.statCost.textContent = moneyFormatter.format(totalCost);
-  el.statProfit.textContent = moneyFormatter.format(totalProfit);
-  el.statOrders.textContent = String(filteredOrders.length);
-  renderBarChart(
-    el.itemStatsChart,
-    aggregateStats(filteredOrders, (order) => order.items.map((item) => ({
+  renderStatsSummary({
+    revenue: totalRevenue,
+    cost: totalCost,
+    profit: totalProfit,
+    orders: filteredOrders.length,
+    items: aggregateStats(filteredOrders, (order) => order.items.map((item) => ({
       name: item.name,
       value: Number(item.quantity || 0) * Number(item.sellingPrice || 0)
-    })))
-  );
-  renderBarChart(
-    el.customerStatsChart,
-    aggregateStats(filteredOrders, (order) => [{ name: order.customerName || 'Chưa rõ', value: Number(order.totalRevenue || 0) }])
-  );
+    }))),
+    customers: aggregateStats(filteredOrders, (order) => [{
+      name: order.customerName || 'Chưa rõ',
+      value: Number(order.totalRevenue || 0)
+    }])
+  });
+}
+
+function renderStatsSummary(stats) {
+  el.statRevenue.textContent = moneyFormatter.format(Number(stats.revenue || 0));
+  el.statCost.textContent = moneyFormatter.format(Number(stats.cost || 0));
+  el.statProfit.textContent = moneyFormatter.format(Number(stats.profit || 0));
+  el.statOrders.textContent = String(Number(stats.orders || 0));
+  renderBarChart(el.itemStatsChart, Array.isArray(stats.items) ? stats.items : []);
+  renderBarChart(el.customerStatsChart, Array.isArray(stats.customers) ? stats.customers : []);
 }
 
 function aggregateStats(orders, getEntries) {
