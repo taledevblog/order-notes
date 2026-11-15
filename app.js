@@ -57,6 +57,7 @@ function cacheElements() {
   el.statOrders = document.getElementById('stat-orders');
   el.itemStatsChart = document.getElementById('item-stats-chart');
   el.customerStatsChart = document.getElementById('customer-stats-chart');
+  el.printBill = document.getElementById('print-bill');
 }
 
 function bindEvents() {
@@ -520,15 +521,78 @@ function renderOrdersList() {
         <strong>${moneyFormatter.format(order.profit)}</strong>
       </div>
       <div class="form-actions order-actions">
+        <button class="print-btn" type="button">In bill</button>
         <button class="edit-btn" type="button">Sửa note</button>
         <button class="delete-btn" type="button">Xóa note</button>
       </div>
     `;
 
+    card.querySelector('.print-btn').addEventListener('click', () => printOrder(order.id));
     card.querySelector('.edit-btn').addEventListener('click', () => editOrder(order.id));
     card.querySelector('.delete-btn').addEventListener('click', () => deleteOrder(order.id));
     el.ordersList.appendChild(card);
   });
+}
+
+async function printOrder(orderId) {
+  const order = state.orders.find((entry) => entry.id === orderId);
+  if (!order) return;
+
+  const itemRows = order.items.map((item, index) => {
+    const quantity = Number(item.quantity || 0);
+    const amount = quantity * Number(item.sellingPrice || 0);
+    return `
+      <tr>
+        <td>${index + 1}</td>
+        <td class="bill-item-name">${escapeHtml(item.name)}<small>${moneyFormatter.format(item.sellingPrice)} / món</small></td>
+        <td>${quantity}</td>
+        <td class="bill-amount">${moneyFormatter.format(amount)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const createdAt = formatBillDate(order.orderedAt);
+  const pickupTime = order.pickupTime ? formatBillDate(order.pickupTime) : '';
+  el.printBill.innerHTML = `
+    <header class="bill-header">
+      <h1>BẾP NHÀ MÍA</h1>
+      <p>HÓA ĐƠN BÁN HÀNG</p>
+    </header>
+    <div class="bill-customer"><span>Khách hàng</span><strong>${escapeHtml(order.customerName)}</strong></div>
+    ${createdAt ? `<p class="bill-meta">Ngày tạo: ${createdAt}</p>` : ''}
+    ${pickupTime ? `<p class="bill-meta">Thời gian lấy: ${pickupTime}</p>` : ''}
+    <table class="bill-table">
+      <thead>
+        <tr><th>#</th><th>Món</th><th>SL</th><th>Thành tiền</th></tr>
+      </thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+    <div class="bill-total"><span>Tổng cộng</span><strong>${moneyFormatter.format(order.totalRevenue)}</strong></div>
+    <p class="bill-payment-status">Chuyển khoản: ${isTransferPaid(order) ? 'Đã nhận' : 'Chưa nhận'}</p>
+    <div class="bill-qr">
+      <p>Mã QR chuyển khoản</p>
+      <img src="bank.jpg" alt="Mã QR chuyển khoản Bếp Nhà Mía" />
+    </div>
+    <footer class="bill-thanks">
+      <strong>Cảm ơn quý khách!</strong>
+      <p>Bếp Nhà Mía rất vui được phục vụ quý khách.<br>Hẹn gặp lại lần sau ạ.</p>
+    </footer>
+  `;
+
+  const qrImage = el.printBill.querySelector('img');
+  if (!qrImage.complete) {
+    await new Promise((resolve) => {
+      qrImage.addEventListener('load', resolve, { once: true });
+      qrImage.addEventListener('error', resolve, { once: true });
+    });
+  }
+  if (qrImage.naturalWidth === 0) showToast('Không tải được bank.jpg; hóa đơn sẽ in không có mã QR.');
+  window.print();
+}
+
+function formatBillDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : formatDisplayDate(date);
 }
 
 function editOrder(orderId) {

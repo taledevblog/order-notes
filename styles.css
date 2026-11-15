@@ -207,6 +207,17 @@ select:focus {
   cursor: pointer;
 }
 
+.print-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: #e0f2fe;
+  color: #075985;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .table-actions {
   display: flex;
   gap: 8px;
@@ -551,7 +562,8 @@ th {
   .secondary-btn,
   .ghost-btn,
   .delete-btn,
-  .edit-btn {
+  .edit-btn,
+  .print-btn {
     width: 100%;
     justify-content: center;
   }
@@ -627,5 +639,149 @@ th {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+}
+
+.print-bill {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 3mm;
+  }
+
+  body {
+    min-height: 0;
+    background: #fff;
+  }
+
+  body > :not(#print-bill) {
+    display: none !important;
+  }
+
+  #print-bill {
+    display: block !important;
+    width: 72mm;
+    margin: 0 auto;
+    padding: 2mm;
+    color: #111;
+    font-family: Arial, sans-serif;
+    font-size: 10pt;
+  }
+
+  .bill-header {
+    text-align: center;
+    border-bottom: 1px dashed #555;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+
+  .bill-header h1 {
+    margin: 0 0 4px;
+    font-size: 20pt;
+  }
+
+  .bill-header p,
+  .bill-meta,
+  .bill-customer,
+  .bill-payment-status {
+    margin: 4px 0;
+  }
+
+  .bill-customer {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .bill-customer strong {
+    text-align: right;
+  }
+
+  .bill-table,
+  .bill-table thead,
+  .bill-table tbody,
+  .bill-table tr {
+    display: table;
+    width: 100%;
+    min-width: 0;
+    border-collapse: collapse;
+  }
+
+  .bill-table thead {
+    display: table-header-group;
+  }
+
+  .bill-table tbody {
+    display: table-row-group;
+  }
+
+  .bill-table tr {
+    display: table-row;
+  }
+
+  .bill-table th,
+  .bill-table td {
+    display: table-cell;
+    width: auto;
+    padding: 6px 3px;
+    border-bottom: 1px solid #bbb;
+    text-align: left;
+    vertical-align: top;
+    font-size: 9pt;
+  }
+
+  .bill-table th:nth-child(1),
+  .bill-table td:nth-child(1),
+  .bill-table th:nth-child(3),
+  .bill-table td:nth-child(3) {
+    text-align: center;
+  }
+
+  .bill-item-name small {
+    display: block;
+    margin-top: 2px;
+    color: #555;
+  }
+
+  .bill-amount {
+    text-align: right !important;
+    white-space: nowrap;
+  }
+
+  .bill-total {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px dashed #555;
+    font-size: 12pt;
+  }
+
+  .bill-qr {
+    margin-top: 10px;
+    text-align: center;
+  }
+
+  .bill-qr p {
+    margin: 0 0 6px;
+    font-weight: 700;
+  }
+
+  .bill-qr img {
+    display: block;
+    width: 44mm;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .bill-thanks {
+    margin-top: 10px;
+    text-align: center;
+  }
+
+  .bill-thanks p {
+    margin: 4px 0 0;
   }
 }
