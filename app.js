@@ -5,6 +5,7 @@ const state = {
   cart: [],
   editingItemId: null,
   editingOrderId: null,
+  activeBillId: null,
   busyCount: 0
 };
 
@@ -57,7 +58,10 @@ function cacheElements() {
   el.statOrders = document.getElementById('stat-orders');
   el.itemStatsChart = document.getElementById('item-stats-chart');
   el.customerStatsChart = document.getElementById('customer-stats-chart');
-  el.printBill = document.getElementById('print-bill');
+  el.billModal = document.getElementById('bill-modal');
+  el.billPreview = document.getElementById('bill-preview');
+  el.closeBill = document.getElementById('close-bill');
+  el.saveBillImage = document.getElementById('save-bill-image');
 }
 
 function bindEvents() {
@@ -75,6 +79,14 @@ function bindEvents() {
   el.paymentFilter.addEventListener('change', renderOrdersList);
   el.refreshStats.addEventListener('click', renderStats);
   el.statsRange.addEventListener('change', updateStatsInputType);
+  el.closeBill.addEventListener('click', closeBill);
+  el.saveBillImage.addEventListener('click', downloadBillImage);
+  el.billModal.addEventListener('click', (event) => {
+    if (event.target === el.billModal) closeBill();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !el.billModal.hidden) closeBill();
+  });
 }
 
 function hydrateDateInputs() {
@@ -521,22 +533,23 @@ function renderOrdersList() {
         <strong>${moneyFormatter.format(order.profit)}</strong>
       </div>
       <div class="form-actions order-actions">
-        <button class="print-btn" type="button">In bill</button>
+        <button class="bill-btn" type="button">Xem bill</button>
         <button class="edit-btn" type="button">Sửa note</button>
         <button class="delete-btn" type="button">Xóa note</button>
       </div>
     `;
 
-    card.querySelector('.print-btn').addEventListener('click', () => printOrder(order.id));
+    card.querySelector('.bill-btn').addEventListener('click', () => showBill(order.id));
     card.querySelector('.edit-btn').addEventListener('click', () => editOrder(order.id));
     card.querySelector('.delete-btn').addEventListener('click', () => deleteOrder(order.id));
     el.ordersList.appendChild(card);
   });
 }
 
-async function printOrder(orderId) {
+function showBill(orderId) {
   const order = state.orders.find((entry) => entry.id === orderId);
   if (!order) return;
+  state.activeBillId = order.id;
 
   const itemRows = order.items.map((item, index) => {
     const quantity = Number(item.quantity || 0);
@@ -553,9 +566,9 @@ async function printOrder(orderId) {
 
   const createdAt = formatBillDate(order.orderedAt);
   const pickupTime = order.pickupTime ? formatBillDate(order.pickupTime) : '';
-  el.printBill.innerHTML = `
+  el.billPreview.innerHTML = `
     <header class="bill-header">
-      <h1>BẾP NHÀ MÍA</h1>
+      <h1 id="bill-title">BẾP NHÀ MÍA</h1>
       <p>HÓA ĐƠN BÁN HÀNG</p>
     </header>
     <div class="bill-customer"><span>Khách hàng</span><strong>${escapeHtml(order.customerName)}</strong></div>
@@ -571,7 +584,8 @@ async function printOrder(orderId) {
     <p class="bill-payment-status">Chuyển khoản: ${isTransferPaid(order) ? 'Đã nhận' : 'Chưa nhận'}</p>
     <div class="bill-qr">
       <p>Mã QR chuyển khoản</p>
-      <img src="bank.jpg" alt="Mã QR chuyển khoản Bếp Nhà Mía" />
+      <img src="./bank.jpg" alt="Mã QR chuyển khoản Bếp Nhà Mía" />
+      <p class="bill-image-error" hidden>Không tải được bank.jpg. Hãy đảm bảo file này đã được đưa lên website.</p>
     </div>
     <footer class="bill-thanks">
       <strong>Cảm ơn quý khách!</strong>
@@ -579,15 +593,225 @@ async function printOrder(orderId) {
     </footer>
   `;
 
-  const qrImage = el.printBill.querySelector('img');
-  if (!qrImage.complete) {
-    await new Promise((resolve) => {
-      qrImage.addEventListener('load', resolve, { once: true });
-      qrImage.addEventListener('error', resolve, { once: true });
-    });
+  const qrImage = el.billPreview.querySelector('img');
+  const showQrError = () => {
+    el.billPreview.querySelector('.bill-image-error').hidden = false;
+  };
+  if (qrImage.complete) {
+    if (qrImage.naturalWidth === 0) showQrError();
+  } else {
+    qrImage.addEventListener('error', showQrError, { once: true });
   }
-  if (qrImage.naturalWidth === 0) showToast('Không tải được bank.jpg; hóa đơn sẽ in không có mã QR.');
-  window.print();
+  el.billModal.hidden = false;
+  document.body.classList.add('bill-modal-open');
+  el.closeBill.focus();
+}
+
+function closeBill() {
+  el.billModal.hidden = true;
+  document.body.classList.remove('bill-modal-open');
+  state.activeBillId = null;
+}
+
+async function downloadBillImage() {
+  const order = state.orders.find((entry) => entry.id === state.activeBillId);
+  if (!order) return;
+
+  await beginBusy('Đang tạo ảnh bill...');
+  try {
+    const qrImage = el.billPreview.querySelector('img');
+    if (!qrImage || !qrImage.complete || qrImage.naturalWidth === 0) {
+      throw new Error('QR_IMAGE_NOT_LOADED');
+    }
+
+    const canvas = createBillCanvas(order, qrImage);
+    const imageBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!imageBlob) throw new Error('IMAGE_EXPORT_FAILED');
+
+    const downloadUrl = URL.createObjectURL(imageBlob);
+    const link = document.createElement('a');
+    const safeCustomerName = String(order.customerName || 'khach')
+      .replace(/[\\/:*?"<>|]+/g, '-')
+      .trim();
+    link.href = downloadUrl;
+    link.download = `bill-${safeCustomerName || 'khach'}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    showToast('Đã tải ảnh bill xuống máy.');
+  } catch (error) {
+    console.error(error);
+    if (error.message === 'QR_IMAGE_NOT_LOADED') {
+      showToast('Chưa tải được mã QR. Hãy đưa bank.jpg lên website rồi thử lại.');
+    } else {
+      showToast('Không thể tạo ảnh bill.');
+    }
+  } finally {
+    endBusy();
+  }
+}
+
+function createBillCanvas(order, qrImage) {
+  const width = 900;
+  const padding = 56;
+  const contentWidth = width - padding * 2;
+  let canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = 1200;
+  let context = canvas.getContext('2d');
+  let y = padding;
+
+  function ensureHeight(height) {
+    if (height <= canvas.height) return;
+    const expanded = document.createElement('canvas');
+    expanded.width = width;
+    expanded.height = Math.max(height, canvas.height * 2);
+    expanded.getContext('2d').drawImage(canvas, 0, 0);
+    canvas = expanded;
+    context = canvas.getContext('2d');
+  }
+
+  function writeText(text, x, baseline, maxWidth, font, color = '#111827', align = 'left', lineHeight = 32) {
+    context.font = font;
+    const lines = wrapCanvasText(context, text, maxWidth);
+    lines.forEach((line) => {
+      ensureHeight(baseline + lineHeight);
+      context.font = font;
+      context.fillStyle = color;
+      context.textAlign = align;
+      context.fillText(line, x, baseline, maxWidth);
+      baseline += lineHeight;
+    });
+    return baseline;
+  }
+
+  function drawRule() {
+    ensureHeight(y + 12);
+    context.strokeStyle = '#94a3b8';
+    context.setLineDash([8, 6]);
+    context.beginPath();
+    context.moveTo(padding, y);
+    context.lineTo(width - padding, y);
+    context.stroke();
+    context.setLineDash([]);
+    y += 22;
+  }
+
+  y = writeText('BẾP NHÀ MÍA', width / 2, y + 42, contentWidth, 'bold 42px Arial', '#111827', 'center', 48);
+  y = writeText('HÓA ĐƠN BÁN HÀNG', width / 2, y + 4, contentWidth, 'bold 26px Arial', '#334155', 'center', 34);
+  y += 12;
+  drawRule();
+  y = writeText('Khách hàng', padding, y, contentWidth, '22px Arial', '#475569', 'left', 30);
+  y = writeText(order.customerName || '', padding, y + 2, contentWidth, 'bold 28px Arial', '#111827', 'left', 36);
+
+  const createdAt = formatBillDate(order.orderedAt);
+  const pickupTime = order.pickupTime ? formatBillDate(order.pickupTime) : '';
+  if (createdAt) y = writeText(`Ngày tạo: ${createdAt}`, padding, y + 4, contentWidth, '20px Arial', '#475569', 'left', 28);
+  if (pickupTime) y = writeText(`Thời gian lấy: ${pickupTime}`, padding, y + 2, contentWidth, '20px Arial', '#475569', 'left', 28);
+  y += 8;
+  drawRule();
+
+  const indexX = padding;
+  const nameX = padding + 54;
+  const quantityX = width - padding - 188;
+  const amountX = width - padding;
+  const itemNameWidth = quantityX - nameX - 36;
+  ensureHeight(y + 50);
+  context.font = 'bold 20px Arial';
+  context.fillStyle = '#334155';
+  context.textAlign = 'left';
+  context.fillText('Món', nameX, y);
+  context.textAlign = 'center';
+  context.fillText('SL', quantityX, y);
+  context.textAlign = 'right';
+  context.fillText('Thành tiền', amountX, y);
+  y += 40;
+  context.strokeStyle = '#e2e8f0';
+  context.beginPath();
+  context.moveTo(padding, y - 10);
+  context.lineTo(width - padding, y - 10);
+  context.stroke();
+
+  order.items.forEach((item, index) => {
+    const quantity = Number(item.quantity || 0);
+    context.font = '24px Arial';
+    const itemLines = wrapCanvasText(context, item.name, itemNameWidth);
+    const rowHeight = Math.max(70, 30 * itemLines.length + 52);
+    ensureHeight(y + rowHeight + 12);
+    const rowStart = y;
+    context.textAlign = 'left';
+    context.fillStyle = '#111827';
+    context.font = '20px Arial';
+    context.fillText(String(index + 1), indexX, rowStart + 25);
+    itemLines.forEach((line, lineIndex) => {
+      context.fillText(line, nameX, rowStart + 25 + lineIndex * 30, itemNameWidth);
+    });
+    context.fillStyle = '#64748b';
+    context.font = '16px Arial';
+    context.fillText(`${moneyFormatter.format(item.sellingPrice)} / món`, nameX, rowStart + 25 + itemLines.length * 30);
+    context.fillStyle = '#111827';
+    context.font = '20px Arial';
+    context.textAlign = 'center';
+    context.fillText(String(quantity), quantityX, rowStart + 25);
+    context.textAlign = 'right';
+    context.fillText(moneyFormatter.format(quantity * Number(item.sellingPrice || 0)), amountX, rowStart + 25);
+    y += rowHeight;
+    context.strokeStyle = '#e2e8f0';
+    context.beginPath();
+    context.moveTo(padding, y);
+    context.lineTo(width - padding, y);
+    context.stroke();
+    y += 12;
+  });
+
+  y = writeText('Tổng cộng', padding, y + 24, contentWidth / 2, 'bold 26px Arial', '#111827', 'left', 34);
+  context.textAlign = 'right';
+  context.font = 'bold 28px Arial';
+  context.fillStyle = '#111827';
+  context.fillText(moneyFormatter.format(order.totalRevenue), amountX, y - 34);
+  y += 14;
+  y = writeText(`Chuyển khoản: ${isTransferPaid(order) ? 'Đã nhận' : 'Chưa nhận'}`, padding, y, contentWidth, '20px Arial', '#475569', 'left', 28);
+  y += 12;
+  drawRule();
+  y = writeText('Mã QR chuyển khoản', width / 2, y + 18, contentWidth, 'bold 24px Arial', '#111827', 'center', 32);
+
+  const qrWidth = Math.min(460, contentWidth);
+  const qrHeight = qrWidth * qrImage.naturalHeight / qrImage.naturalWidth;
+  ensureHeight(y + qrHeight + 20);
+  context.drawImage(qrImage, (width - qrWidth) / 2, y, qrWidth, qrHeight);
+  y += qrHeight + 24;
+  y = writeText('Cảm ơn quý khách!', width / 2, y, contentWidth, 'bold 28px Arial', '#111827', 'center', 36);
+  writeText('Bếp Nhà Mía rất vui được phục vụ quý khách. Hẹn gặp lại lần sau ạ.', width / 2, y + 4, contentWidth, '20px Arial', '#475569', 'center', 28);
+
+  const output = document.createElement('canvas');
+  output.width = width;
+  output.height = y + padding + 40;
+  const outputContext = output.getContext('2d');
+  outputContext.fillStyle = '#fff';
+  outputContext.fillRect(0, 0, output.width, output.height);
+  const contentHeight = Math.min(canvas.height, output.height);
+  outputContext.drawImage(canvas, 0, 0, width, contentHeight, 0, 0, width, contentHeight);
+  return output;
+}
+
+function wrapCanvasText(context, value, maxWidth) {
+  const words = String(value || '').split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [''];
+
+  const lines = [];
+  let line = '';
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && context.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  });
+  if (line) lines.push(line);
+  return lines;
 }
 
 function formatBillDate(value) {

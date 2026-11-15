@@ -7,7 +7,7 @@
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
     <script src="config.js"></script>
-    <script defer src="app.js?v=2"></script>
+    <script defer src="app.js?v=3"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -20,13 +20,13 @@
       </header>
 
       <nav class="tabs" aria-label="Tabs">
-        <button class="tab-btn active" type="button" data-target="items-section">1. Tạo món hàng</button>
-        <button class="tab-btn" type="button" data-target="orders-section">2. Ghi note bán hàng</button>
-        <button class="tab-btn" type="button" data-target="stats-section">3. Thống kê</button>
+        <button class="tab-btn active" type="button" data-target="orders-section">1. Ghi note bán hàng</button>
+        <button class="tab-btn" type="button" data-target="stats-section">2. Thống kê</button>
+        <button class="tab-btn" type="button" data-target="items-section">3. Tạo món hàng</button>
       </nav>
 
       <main>
-        <section id="items-section" class="tab-pane active">
+        <section id="items-section" class="tab-pane">
           <div class="panel">
             <h2 id="item-form-title">Thêm món hàng</h2>
             <form id="item-form" class="stack-form">
@@ -72,7 +72,7 @@
           </div>
         </section>
 
-        <section id="orders-section" class="tab-pane">
+        <section id="orders-section" class="tab-pane active">
           <div class="panel">
             <h2 id="order-form-title">Ghi note bán hàng</h2>
             <form id="order-form" class="stack-form">
@@ -198,7 +198,13 @@
       </main>
     </div>
 
-    <section id="print-bill" class="print-bill" aria-hidden="true"></section>
+    <div id="bill-modal" class="bill-modal" role="dialog" aria-modal="true" aria-labelledby="bill-title" hidden>
+      <div class="bill-toolbar">
+        <button id="save-bill-image" class="primary-btn" type="button">Tải ảnh bill</button>
+        <button id="close-bill" class="secondary-btn" type="button">Đóng</button>
+      </div>
+      <section id="bill-preview" class="bill-preview"></section>
+    </div>
     <div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite" hidden>
       <span class="loading-spinner" aria-hidden="true"></span>
       <span id="loading-message">Đang xử lý...</span>
