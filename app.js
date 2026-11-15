@@ -93,7 +93,6 @@ async function loadData() {
   await beginBusy('Đang tải dữ liệu...');
   try {
     if (config.useGoogleSheets && config.scriptUrl && !config.scriptUrl.includes('PASTE')) {
-      showToast('Đang đồng bộ dữ liệu từ Google Sheets...');
       const [itemsResponse, ordersResponse] = await Promise.all([
         callSheetAction('listItems'),
         callSheetAction('listOrders')
