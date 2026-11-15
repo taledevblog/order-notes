@@ -46,7 +46,8 @@ function normalizeOrderRow_(row) {
     totalRevenue: Number(row[5] || 0),
     totalCost: Number(row[6] || 0),
     profit: Number(row[7] || 0),
-    transferPaid: isTransferPaid_(row[8])
+    transferPaid: isTransferPaid_(row[8]),
+    notes: row[9] || ''
   };
 }
 
@@ -97,7 +98,7 @@ function saveItem_(item) {
 
 function listOrders_() {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes']);
 
   const values = sheet.getDataRange().getValues();
   if (values.length <= 1) {
@@ -109,12 +110,14 @@ function listOrders_() {
 
 function listOrdersPage_(filter = {}) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes']);
 
   const values = sheet.getDataRange().getValues();
+  const customerSearch = String(filter.customerSearch || '').trim().toLowerCase();
   const paymentFilter = filter.paymentFilter || 'all';
   const matchingRows = values.slice(1).filter((row) => {
     if (!(row[0] || row[1])) return false;
+    if (customerSearch && !String(row[1] || '').toLowerCase().includes(customerSearch)) return false;
     if (paymentFilter === 'paid') return isTransferPaid_(row[8]);
     if (paymentFilter === 'unpaid') return !isTransferPaid_(row[8]);
     return true;
@@ -141,7 +144,7 @@ function listOrdersPage_(filter = {}) {
 
 function saveOrder_(order) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes']);
 
   const row = [
     order.id || Utilities.getUuid(),
@@ -152,7 +155,8 @@ function saveOrder_(order) {
     Number(order.totalRevenue || 0),
     Number(order.totalCost || 0),
     Number(order.profit || 0),
-    Boolean(order.transferPaid)
+    Boolean(order.transferPaid),
+    String(order.notes || '')
   ];
 
   const values = sheet.getDataRange().getValues();
@@ -169,7 +173,7 @@ function saveOrder_(order) {
 
 function deleteOrder_(orderId) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes']);
 
   const values = sheet.getDataRange().getValues();
   const existingIndex = values.findIndex((row, index) => index > 0 && String(row[0]) === String(orderId));

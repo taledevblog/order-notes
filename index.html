@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Order Notes</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=2" />
+    <link rel="stylesheet" href="styles.css?v=3" />
     <script src="config.js"></script>
-    <script defer src="app.js?v=4"></script>
+    <script defer src="app.js?v=6"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -109,6 +109,10 @@
                   </select>
                 </label>
               </div>
+              <label>
+                <span>Ghi chú đơn hàng</span>
+                <textarea id="order-notes" rows="3" placeholder="Ví dụ: ít đá, giao trước 12 giờ"></textarea>
+              </label>
 
               <div class="summary-box">
                 <div>
@@ -133,6 +137,11 @@
               <h2>Danh sách note</h2>
             </div>
             <div class="filter-row order-filter">
+              <label>
+                <span>Tìm tên khách hàng</span>
+                <input id="customer-search" type="search" placeholder="Nhập tên khách hàng..." />
+              </label>
+              <button id="search-customer" class="primary-btn" type="button">Tìm kiếm</button>
               <label>
                 <span>Lọc chuyển khoản</span>
                 <select id="payment-filter">

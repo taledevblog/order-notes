@@ -9,7 +9,8 @@ const state = {
   busyCount: 0,
   ordersPage: 1,
   ordersTotal: 0,
-  ordersFromSheets: false
+  ordersFromSheets: false,
+  customerSearchQuery: ''
 };
 
 const ORDERS_PER_PAGE = 10;
@@ -46,10 +47,13 @@ function cacheElements() {
   el.pickupTime = document.getElementById('pickup-time');
   el.pickupName = document.getElementById('pickup-name');
   el.transferPaid = document.getElementById('transfer-paid');
+  el.orderNotes = document.getElementById('order-notes');
   el.cartTotalRevenue = document.getElementById('cart-total-revenue');
   el.cartTotalProfit = document.getElementById('cart-total-profit');
   el.ordersList = document.getElementById('orders-list');
   el.paymentFilter = document.getElementById('payment-filter');
+  el.customerSearch = document.getElementById('customer-search');
+  el.searchCustomer = document.getElementById('search-customer');
   el.ordersPagination = document.getElementById('orders-pagination');
   el.ordersPrev = document.getElementById('orders-prev');
   el.ordersNext = document.getElementById('orders-next');
@@ -93,6 +97,13 @@ function bindEvents() {
       renderOrdersList();
     }
   });
+  el.searchCustomer.addEventListener('click', searchCustomers);
+  el.customerSearch.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      searchCustomers();
+    }
+  });
   el.ordersPrev.addEventListener('click', () => changeOrdersPage(-1));
   el.ordersNext.addEventListener('click', () => changeOrdersPage(1));
   el.refreshStats.addEventListener('click', renderStats);
@@ -130,7 +141,8 @@ async function loadData() {
         callSheetAction('listOrdersPage', {
           page: 1,
           pageSize: ORDERS_PER_PAGE,
-          paymentFilter: el.paymentFilter.value
+          paymentFilter: el.paymentFilter.value,
+          customerSearch: state.customerSearchQuery
         })
       ]);
 
@@ -186,7 +198,8 @@ async function fetchOrdersPage(page) {
   const response = await callSheetAction('listOrdersPage', {
     page,
     pageSize: ORDERS_PER_PAGE,
-    paymentFilter: el.paymentFilter.value
+    paymentFilter: el.paymentFilter.value,
+    customerSearch: state.customerSearchQuery
   });
   const result = response.data;
   if (!result || !Array.isArray(result.orders) || !Number.isFinite(Number(result.total))) {
@@ -346,9 +359,9 @@ function renderItemsTable() {
   state.items.forEach((item) => {
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td data-label="Tên món">${escapeHtml(item.name)}</td>
-      <td data-label="Giá bán">${moneyFormatter.format(item.sellingPrice)}</td>
-      <td data-label="Giá cost">${moneyFormatter.format(item.cost)}</td>
+      <td data-label="Tên món"><span class="table-cell-value">${escapeHtml(item.name)}</span></td>
+      <td data-label="Giá bán"><span class="table-cell-value">${moneyFormatter.format(item.sellingPrice)}</span></td>
+      <td data-label="Giá cost"><span class="table-cell-value">${moneyFormatter.format(item.cost)}</span></td>
       <td data-label="Thao tác"><div class="table-actions">
         <button class="edit-btn" type="button">Sửa</button>
         <button class="delete-btn" type="button">Xóa</button>
@@ -470,6 +483,7 @@ async function saveOrder(event) {
     pickupTime: el.pickupTime.value || new Date().toISOString(),
     orderedAt: previousOrder ? previousOrder.orderedAt : new Date().toISOString(),
     transferPaid: el.transferPaid.value === 'true',
+    notes: el.orderNotes.value.trim(),
     items: state.cart.map((item) => ({
       id: item.id,
       name: item.name,
@@ -594,7 +608,7 @@ function renderOrdersList() {
 
   const filteredOrders = state.ordersFromSheets
     ? [...state.orders]
-    : state.orders.filter((order) => matchesPaymentFilter(order));
+    : state.orders.filter((order) => matchesPaymentFilter(order) && matchesCustomerSearch(order));
   const sortedOrders = filteredOrders.sort((left, right) => {
     const leftTime = Date.parse(left.orderedAt || '') || 0;
     const rightTime = Date.parse(right.orderedAt || '') || 0;
@@ -635,6 +649,7 @@ function renderOrdersList() {
       <div class="order-status ${isTransferPaid(order) ? 'paid' : 'unpaid'}">
         Chuyển khoản: ${isTransferPaid(order) ? 'Đã nhận' : 'Chưa nhận'}
       </div>
+      ${order.notes ? `<p class="order-note"><strong>Ghi chú:</strong> ${escapeHtml(order.notes).replace(/\n/g, '<br>')}</p>` : ''}
       <div class="order-items">
         ${order.items
           .map(
@@ -669,10 +684,25 @@ function changeOrdersPage(direction) {
   loadOrdersPage(state.ordersPage + direction);
 }
 
+function searchCustomers() {
+  state.customerSearchQuery = el.customerSearch.value.trim();
+  state.ordersPage = 1;
+  if (state.ordersFromSheets) {
+    loadOrdersPage(1);
+  } else {
+    renderOrdersList();
+  }
+}
+
 function matchesPaymentFilter(order) {
   if (el.paymentFilter.value === 'paid') return isTransferPaid(order);
   if (el.paymentFilter.value === 'unpaid') return !isTransferPaid(order);
   return true;
+}
+
+function matchesCustomerSearch(order) {
+  const search = state.customerSearchQuery.toLowerCase();
+  return !search || String(order.customerName || '').toLowerCase().includes(search);
 }
 
 function showBill(orderId) {
@@ -701,6 +731,7 @@ function showBill(orderId) {
     </header>
     <div class="bill-customer"><span>Khách hàng</span><strong>${escapeHtml(order.customerName)}</strong></div>
     ${pickupTime ? `<p class="bill-meta">Thời gian: ${pickupTime}</p>` : ''}
+    ${order.notes ? `<p class="bill-note"><strong>Ghi chú:</strong> ${escapeHtml(order.notes).replace(/\n/g, '<br>')}</p>` : ''}
     <table class="bill-table">
       <thead>
         <tr><th>#</th><th>Món</th><th>SL</th><th>Thành tiền</th></tr>
@@ -833,6 +864,10 @@ function createBillCanvas(order, qrImage) {
 
   const pickupTime = order.pickupTime ? formatBillDate(order.pickupTime) : '';
   if (pickupTime) y = writeText(`Thời gian: ${pickupTime}`, padding, y + 4, contentWidth, '20px Arial', '#475569', 'left', 28);
+  if (order.notes) {
+    y = writeText('Ghi chú', padding, y + 4, contentWidth, 'bold 20px Arial', '#475569', 'left', 28);
+    y = writeText(order.notes, padding, y, contentWidth, '20px Arial', '#111827', 'left', 28);
+  }
   y += 8;
   drawRule();
 
@@ -950,6 +985,7 @@ function editOrder(orderId) {
   el.pickupName.value = order.customerName;
   el.pickupTime.value = order.pickupTime ? toLocalDateTimeInputValue(new Date(order.pickupTime)) : '';
   el.transferPaid.value = String(isTransferPaid(order));
+  el.orderNotes.value = order.notes || '';
   el.orderFormTitle.textContent = 'Chỉnh sửa note bán hàng';
   el.orderForm.querySelector('button[type="submit"]').textContent = 'Cập nhật note';
   el.cancelOrderEdit.hidden = false;

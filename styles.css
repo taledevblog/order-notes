@@ -31,7 +31,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -138,7 +139,8 @@ span {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -148,9 +150,15 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid rgba(37, 99, 235, 0.18);
   border-color: var(--primary);
+}
+
+textarea {
+  min-height: 84px;
+  resize: vertical;
 }
 
 .form-actions {
@@ -360,6 +368,21 @@ th {
   color: #b45309;
 }
 
+.order-note,
+.bill-note {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.order-note {
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+
+.order-note strong {
+  color: var(--text);
+}
+
 .order-actions {
   margin-top: 14px;
 }
@@ -567,8 +590,15 @@ th {
     border-radius: 14px;
   }
 
-  .two-columns,
+  .two-columns {
+    grid-template-columns: 1fr;
+  }
+
   .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stats-charts {
     grid-template-columns: 1fr;
   }
 
@@ -597,14 +627,13 @@ th {
   .cart-item .form-actions {
     width: 100%;
   }
-
-  .stats-grid,
-  .stats-charts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 560px) {
+  .table-wrap {
+    overflow: visible;
+  }
+
   table,
   thead,
   tbody,
@@ -639,6 +668,11 @@ th {
     align-items: center;
     gap: 12px;
     word-break: break-word;
+    min-width: 0;
+  }
+
+  table {
+    min-width: 0;
   }
 
   td::before {
@@ -648,12 +682,34 @@ th {
     flex: 0 0 42%;
   }
 
-  td button {
-    width: 100%;
+  td .table-cell-value {
+    flex: 1 1 58%;
+    min-width: 0;
+    color: var(--text);
+    text-align: right;
+  }
+
+  td .table-actions {
+    flex: 1 1 58%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  td .table-actions button {
+    width: auto;
   }
 
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .bar-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .bar-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .order-item-line {
