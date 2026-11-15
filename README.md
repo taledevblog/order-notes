@@ -109,4 +109,4 @@ window.ORDER_NOTES_CONFIG = {
 
 - Import/export dữ liệu Excel
 - Tạo tài khoản quản trị
-- Tạo báo cáo PDF
+- Tạo báo cáo PDF 
