@@ -709,13 +709,16 @@ function renderOrdersList() {
   pageOrders.forEach((order) => {
     const card = document.createElement('div');
     card.className = 'order-card';
-    const orderDate = new Date(order.orderedAt);
+    const pickupDate = order.pickupTime ? new Date(order.pickupTime) : null;
+    const pickupDateText = pickupDate && !Number.isNaN(pickupDate.getTime())
+      ? `Thời gian lấy: ${formatDisplayDate(pickupDate)}`
+      : '';
 
     card.innerHTML = `
       <div class="order-top">
         <div>
           <strong>Khách: ${escapeHtml(order.customerName)}</strong>
-          <div><small>${formatDisplayDate(orderDate)}</small></div>
+          ${pickupDateText ? `<div><small>${escapeHtml(pickupDateText)}</small></div>` : ''}
         </div>
         <div>
           <strong>${moneyFormatter.format(getOrderTotal(order))}</strong>
