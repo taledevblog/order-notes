@@ -8,17 +8,20 @@ Một web app đơn giản để quản lý món hàng và ghi note bán hàng, 
   - Tên món
   - Giá bán
   - Giá cost
+  - Chỉnh sửa món hàng
 - Màn hình 2: ghi note bán hàng
   - Chọn nhiều món trong 1 đơn hàng
   - Số lượng
   - Thời gian lấy (tuỳ chọn)
   - Tên người lấy (Zalo/Facebook)
+  - Đánh dấu đã/chưa chuyển khoản, lọc note theo trạng thái và chỉnh sửa note
 - Màn hình 3: thống kê
   - Theo ngày / tháng / năm
   - Doanh thu
   - Lợi nhuận
   - Chi phí
   - Số đơn hàng
+  - Biểu đồ doanh thu theo món và khách hàng
 
 ## Cấu trúc dự án
 
@@ -104,8 +107,6 @@ window.ORDER_NOTES_CONFIG = {
 
 ## Có thể cải tiến sau
 
-- Cho phép sửa/xóa đơn hàng
 - Import/export dữ liệu Excel
-- Dashboard biểu đồ doanh thu theo ngày/tháng
 - Tạo tài khoản quản trị
 - Tạo báo cáo PDF

@@ -16,8 +16,14 @@ function ensureSheet_(sheetName) {
 
 function ensureHeaders_(sheet, headers) {
   const existing = sheet.getDataRange().getValues();
-  if (existing.length === 0) {
-    sheet.appendRow(headers);
+  if (existing.length === 0 || existing[0].every((value) => value === '')) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return;
+  }
+
+  const missingHeaders = headers.filter((header) => !existing[0].includes(header));
+  if (missingHeaders.length > 0) {
+    sheet.getRange(1, existing[0].length + 1, 1, missingHeaders.length).setValues([missingHeaders]);
   }
 }
 
@@ -39,7 +45,8 @@ function normalizeOrderRow_(row) {
     items: JSON.parse(row[4] || '[]'),
     totalRevenue: Number(row[5] || 0),
     totalCost: Number(row[6] || 0),
-    profit: Number(row[7] || 0)
+    profit: Number(row[7] || 0),
+    transferPaid: row[8] === true || String(row[8]).toLowerCase() === 'true' || String(row[8]).toLowerCase() === 'yes'
   };
 }
 
@@ -80,7 +87,7 @@ function saveItem_(item) {
 
 function listOrders_() {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid']);
 
   const values = sheet.getDataRange().getValues();
   if (values.length <= 1) {
@@ -92,7 +99,7 @@ function listOrders_() {
 
 function saveOrder_(order) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid']);
 
   const row = [
     order.id || Utilities.getUuid(),
@@ -102,8 +109,17 @@ function saveOrder_(order) {
     JSON.stringify(order.items || []),
     Number(order.totalRevenue || 0),
     Number(order.totalCost || 0),
-    Number(order.profit || 0)
+    Number(order.profit || 0),
+    Boolean(order.transferPaid)
   ];
+
+  const values = sheet.getDataRange().getValues();
+  const existingIndex = values.findIndex((existingRow) => String(existingRow[0]) === String(order.id));
+
+  if (existingIndex >= 0) {
+    sheet.getRange(existingIndex + 1, 1, 1, row.length).setValues([row]);
+    return { ...order, id: row[0] };
+  }
 
   sheet.appendRow(row);
   return { ...order, id: row[0] };

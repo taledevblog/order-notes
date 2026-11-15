@@ -196,6 +196,22 @@ select:focus {
   color: var(--danger);
 }
 
+.edit-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: rgba(37, 99, 235, 0.09);
+  color: var(--primary-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -293,6 +309,29 @@ th {
   gap: 8px;
 }
 
+.order-status {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.order-status.paid {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.order-status.unpaid {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
+.order-actions {
+  margin-top: 14px;
+}
+
 .order-item-line {
   display: flex;
   justify-content: space-between;
@@ -327,6 +366,62 @@ th {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+
+.stats-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.chart-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.chart-panel h3 {
+  margin: 0 0 16px;
+}
+
+.bar-chart {
+  display: grid;
+  gap: 14px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) minmax(60px, 2fr) auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eaf0fb;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+}
+
+.bar-row strong {
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .stat-card {
@@ -422,7 +517,8 @@ th {
   .primary-btn,
   .secondary-btn,
   .ghost-btn,
-  .delete-btn {
+  .delete-btn,
+  .edit-btn {
     width: 100%;
     justify-content: center;
   }
@@ -436,7 +532,8 @@ th {
     width: 100%;
   }
 
-  .stats-grid {
+  .stats-grid,
+  .stats-charts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

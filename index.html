@@ -28,7 +28,7 @@
       <main>
         <section id="items-section" class="tab-pane active">
           <div class="panel">
-            <h2>Thêm món hàng</h2>
+            <h2 id="item-form-title">Thêm món hàng</h2>
             <form id="item-form" class="stack-form">
               <div class="grid two-columns">
                 <label>
@@ -47,6 +47,7 @@
               <div class="form-actions">
                 <button type="submit" class="primary-btn">Lưu món</button>
                 <button type="reset" class="secondary-btn">Xóa form</button>
+                <button id="cancel-item-edit" class="secondary-btn" type="button" hidden>Hủy chỉnh sửa</button>
               </div>
             </form>
           </div>
@@ -73,7 +74,7 @@
 
         <section id="orders-section" class="tab-pane">
           <div class="panel">
-            <h2>Ghi note bán hàng</h2>
+            <h2 id="order-form-title">Ghi note bán hàng</h2>
             <form id="order-form" class="stack-form">
               <div class="grid two-columns">
                 <label>
@@ -100,6 +101,13 @@
                   <span>Tên người lấy (Zalo/Facebook)</span>
                   <input id="pickup-name" type="text" placeholder="VD: Bảo, Hạnh" required />
                 </label>
+                <label>
+                  <span>Đã chuyển khoản?</span>
+                  <select id="transfer-paid">
+                    <option value="false">Chưa</option>
+                    <option value="true">Rồi</option>
+                  </select>
+                </label>
               </div>
 
               <div class="summary-box">
@@ -115,6 +123,7 @@
 
               <div class="form-actions">
                 <button type="submit" class="primary-btn">Lưu note bán hàng</button>
+                <button id="cancel-order-edit" class="secondary-btn" type="button" hidden>Hủy chỉnh sửa</button>
               </div>
             </form>
           </div>
@@ -122,6 +131,16 @@
           <div class="panel">
             <div class="section-heading">
               <h2>Danh sách note</h2>
+            </div>
+            <div class="filter-row order-filter">
+              <label>
+                <span>Lọc chuyển khoản</span>
+                <select id="payment-filter">
+                  <option value="all">Tất cả</option>
+                  <option value="paid">Đã chuyển khoản</option>
+                  <option value="unpaid">Chưa chuyển khoản</option>
+                </select>
+              </label>
             </div>
             <div id="orders-list" class="orders-list"></div>
           </div>
@@ -163,6 +182,16 @@
                 <span>Số đơn</span>
                 <strong id="stat-orders">0</strong>
               </div>
+            </div>
+            <div class="stats-charts">
+              <section class="chart-panel" aria-labelledby="item-chart-title">
+                <h3 id="item-chart-title">Doanh thu theo món</h3>
+                <div id="item-stats-chart" class="bar-chart"></div>
+              </section>
+              <section class="chart-panel" aria-labelledby="customer-chart-title">
+                <h3 id="customer-chart-title">Doanh thu theo khách hàng</h3>
+                <div id="customer-stats-chart" class="bar-chart"></div>
+              </section>
             </div>
           </div>
         </section>

@@ -2,7 +2,9 @@ const config = window.ORDER_NOTES_CONFIG || { useGoogleSheets: false, scriptUrl:
 const state = {
   items: [],
   orders: [],
-  cart: []
+  cart: [],
+  editingItemId: null,
+  editingOrderId: null
 };
 
 const moneyFormatter = new Intl.NumberFormat('vi-VN', {
@@ -24,17 +26,23 @@ function cacheElements() {
   el.tabButtons = document.querySelectorAll('.tab-btn');
   el.tabPanes = document.querySelectorAll('.tab-pane');
   el.itemForm = document.getElementById('item-form');
+  el.itemFormTitle = document.getElementById('item-form-title');
+  el.cancelItemEdit = document.getElementById('cancel-item-edit');
   el.itemTableBody = document.getElementById('items-table-body');
   el.orderForm = document.getElementById('order-form');
+  el.orderFormTitle = document.getElementById('order-form-title');
+  el.cancelOrderEdit = document.getElementById('cancel-order-edit');
   el.orderItemSelect = document.getElementById('order-item-select');
   el.orderQty = document.getElementById('order-item-qty');
   el.addOrderItem = document.getElementById('add-order-item');
   el.orderCart = document.getElementById('order-cart');
   el.pickupTime = document.getElementById('pickup-time');
   el.pickupName = document.getElementById('pickup-name');
+  el.transferPaid = document.getElementById('transfer-paid');
   el.cartTotalRevenue = document.getElementById('cart-total-revenue');
   el.cartTotalProfit = document.getElementById('cart-total-profit');
   el.ordersList = document.getElementById('orders-list');
+  el.paymentFilter = document.getElementById('payment-filter');
   el.syncButton = document.getElementById('sync-btn');
   el.toasts = document.getElementById('toast');
   el.statsRange = document.getElementById('stats-range');
@@ -44,6 +52,8 @@ function cacheElements() {
   el.statProfit = document.getElementById('stat-profit');
   el.statCost = document.getElementById('stat-cost');
   el.statOrders = document.getElementById('stat-orders');
+  el.itemStatsChart = document.getElementById('item-stats-chart');
+  el.customerStatsChart = document.getElementById('customer-stats-chart');
 }
 
 function bindEvents() {
@@ -52,9 +62,13 @@ function bindEvents() {
   });
 
   el.itemForm.addEventListener('submit', saveItem);
+  el.itemForm.addEventListener('reset', cancelItemEdit);
+  el.cancelItemEdit.addEventListener('click', () => el.itemForm.reset());
   el.orderForm.addEventListener('submit', saveOrder);
+  el.cancelOrderEdit.addEventListener('click', cancelOrderEdit);
   el.addOrderItem.addEventListener('click', addOrderItemToCart);
   el.syncButton.addEventListener('click', loadData);
+  el.paymentFilter.addEventListener('change', renderOrdersList);
   el.refreshStats.addEventListener('click', renderStats);
   el.statsRange.addEventListener('change', updateStatsInputType);
 }
@@ -120,10 +134,11 @@ function persistLocalDemoData() {
 
 async function saveItem(event) {
   event.preventDefault();
+  const wasEditing = Boolean(state.editingItemId);
 
   const formData = new FormData(event.target);
   const rawItem = {
-    id: `item-${Date.now()}`,
+    id: state.editingItemId || `item-${Date.now()}`,
     name: String(formData.get('itemName') || '').trim(),
     sellingPrice: Number(formData.get('sellingPrice')),
     cost: Number(formData.get('cost'))
@@ -145,7 +160,9 @@ async function saveItem(event) {
       await callSheetAction('saveItem', { item });
     }
 
-    const existingIndex = state.items.findIndex((entry) => entry.name.toLowerCase() === item.name.toLowerCase());
+    const existingIndex = state.editingItemId
+      ? state.items.findIndex((entry) => entry.id === state.editingItemId)
+      : state.items.findIndex((entry) => entry.name.toLowerCase() === item.name.toLowerCase());
     if (existingIndex >= 0) {
       state.items[existingIndex] = { ...state.items[existingIndex], ...item };
     } else {
@@ -156,7 +173,7 @@ async function saveItem(event) {
     renderItemOptions();
     renderItemsTable();
     event.target.reset();
-    showToast('Đã lưu món hàng.');
+    showToast(wasEditing ? 'Đã cập nhật món hàng.' : 'Đã lưu món hàng.');
   } catch (error) {
     console.error(error);
     if (config.useGoogleSheets) {
@@ -166,7 +183,9 @@ async function saveItem(event) {
       showToast('Không thể lưu món hàng.');
     }
 
-    const existingIndex = state.items.findIndex((entry) => entry.name.toLowerCase() === item.name.toLowerCase());
+    const existingIndex = state.editingItemId
+      ? state.items.findIndex((entry) => entry.id === state.editingItemId)
+      : state.items.findIndex((entry) => entry.name.toLowerCase() === item.name.toLowerCase());
     if (existingIndex >= 0) {
       state.items[existingIndex] = { ...state.items[existingIndex], ...item };
     } else {
@@ -178,6 +197,28 @@ async function saveItem(event) {
     renderItemsTable();
     event.target.reset();
   }
+}
+
+function cancelItemEdit() {
+  state.editingItemId = null;
+  if (!el.itemFormTitle) return;
+  el.itemFormTitle.textContent = 'Thêm món hàng';
+  el.itemForm.querySelector('button[type="submit"]').textContent = 'Lưu món';
+  el.cancelItemEdit.hidden = true;
+}
+
+function editItem(itemId) {
+  const item = state.items.find((entry) => entry.id === itemId);
+  if (!item) return;
+
+  state.editingItemId = item.id;
+  document.getElementById('item-name').value = item.name;
+  document.getElementById('item-price').value = item.sellingPrice;
+  document.getElementById('item-cost').value = item.cost;
+  el.itemFormTitle.textContent = 'Chỉnh sửa món hàng';
+  el.itemForm.querySelector('button[type="submit"]').textContent = 'Cập nhật món';
+  el.cancelItemEdit.hidden = false;
+  el.itemForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderItemOptions() {
@@ -197,11 +238,15 @@ function renderItemsTable() {
   state.items.forEach((item) => {
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td data-label="Tên món">${item.name}</td>
+      <td data-label="Tên món">${escapeHtml(item.name)}</td>
       <td data-label="Giá bán">${moneyFormatter.format(item.sellingPrice)}</td>
       <td data-label="Giá cost">${moneyFormatter.format(item.cost)}</td>
-      <td data-label="Thao tác"><button class="delete-btn" type="button" data-id="${item.id}">Xóa</button></td>
+      <td data-label="Thao tác"><div class="table-actions">
+        <button class="edit-btn" type="button">Sửa</button>
+        <button class="delete-btn" type="button">Xóa</button>
+      </div></td>
     `;
+    row.querySelector('.edit-btn').addEventListener('click', () => editItem(item.id));
     row.querySelector('.delete-btn').addEventListener('click', () => deleteItem(item.id));
     el.itemTableBody.appendChild(row);
   });
@@ -275,7 +320,7 @@ function renderCart() {
     itemCard.className = 'cart-item';
     itemCard.innerHTML = `
       <div class="cart-meta">
-        <strong>${entry.name}</strong>
+        <strong>${escapeHtml(entry.name)}</strong>
         <small>${entry.quantity} x ${moneyFormatter.format(entry.sellingPrice)} / mỗi món</small>
       </div>
       <div class="form-actions">
@@ -310,11 +355,13 @@ async function saveOrder(event) {
     return;
   }
 
+  const previousOrder = state.orders.find((entry) => entry.id === state.editingOrderId);
   const order = {
-    id: `order-${Date.now()}`,
+    id: state.editingOrderId || `order-${Date.now()}`,
     customerName,
     pickupTime: el.pickupTime.value || new Date().toISOString(),
-    orderedAt: new Date().toISOString(),
+    orderedAt: previousOrder ? previousOrder.orderedAt : new Date().toISOString(),
+    transferPaid: el.transferPaid.value === 'true',
     items: state.cart.map((item) => ({
       id: item.id,
       name: item.name,
@@ -332,31 +379,45 @@ async function saveOrder(event) {
       await callSheetAction('saveOrder', { order });
     }
 
-    state.orders.push(order);
+    const existingIndex = state.orders.findIndex((entry) => entry.id === order.id);
+    if (existingIndex >= 0) {
+      state.orders[existingIndex] = order;
+    } else {
+      state.orders.push(order);
+    }
     persistLocalDemoData();
     state.cart = [];
+    state.editingOrderId = null;
     renderCart();
     renderOrdersList();
     renderStats();
     el.orderForm.reset();
+    resetOrderEditControls();
     hydrateDateInputs();
-    showToast('Đã lưu note bán hàng.');
+    showToast(existingIndex >= 0 ? 'Đã cập nhật note bán hàng.' : 'Đã lưu note bán hàng.');
   } catch (error) {
     console.error(error);
     if (config.useGoogleSheets) {
       config.useGoogleSheets = false;
-      showToast('Google Sheets bị chặn, đang lưu vào thiết bị.');
+      showToast('Không thể đồng bộ Google Sheets. Note được lưu trên thiết bị.');
     } else {
       showToast('Không thể lưu note bán hàng.');
     }
 
-    state.orders.push(order);
+    const existingIndex = state.orders.findIndex((entry) => entry.id === order.id);
+    if (existingIndex >= 0) {
+      state.orders[existingIndex] = order;
+    } else {
+      state.orders.push(order);
+    }
     persistLocalDemoData();
     state.cart = [];
+    state.editingOrderId = null;
     renderCart();
     renderOrdersList();
     renderStats();
     el.orderForm.reset();
+    resetOrderEditControls();
     hydrateDateInputs();
   }
 }
@@ -364,12 +425,18 @@ async function saveOrder(event) {
 function renderOrdersList() {
   el.ordersList.innerHTML = '';
 
-  if (state.orders.length === 0) {
+  const filteredOrders = state.orders.filter((order) => {
+    if (el.paymentFilter.value === 'paid') return isTransferPaid(order);
+    if (el.paymentFilter.value === 'unpaid') return !isTransferPaid(order);
+    return true;
+  });
+
+  if (filteredOrders.length === 0) {
     el.ordersList.innerHTML = '<p>Chưa có đơn hàng nào.</p>';
     return;
   }
 
-  [...state.orders].reverse().forEach((order) => {
+  [...filteredOrders].reverse().forEach((order) => {
     const card = document.createElement('div');
     card.className = 'order-card';
     const orderDate = new Date(order.orderedAt);
@@ -377,19 +444,22 @@ function renderOrdersList() {
     card.innerHTML = `
       <div class="order-top">
         <div>
-          <strong>Khách: ${order.customerName}</strong>
+          <strong>Khách: ${escapeHtml(order.customerName)}</strong>
           <div><small>${formatDisplayDate(orderDate)}</small></div>
         </div>
         <div>
           <strong>${moneyFormatter.format(order.totalRevenue)}</strong>
         </div>
       </div>
+      <div class="order-status ${isTransferPaid(order) ? 'paid' : 'unpaid'}">
+        Chuyển khoản: ${isTransferPaid(order) ? 'Đã nhận' : 'Chưa nhận'}
+      </div>
       <div class="order-items">
         ${order.items
           .map(
             (item) => `
               <div class="order-item-line">
-                <span><strong>${item.name}</strong> x${item.quantity}</span>
+                <span><strong>${escapeHtml(item.name)}</strong> x${item.quantity}</span>
                 <span>${moneyFormatter.format(item.quantity * item.sellingPrice)}</span>
               </div>
             `
@@ -400,10 +470,46 @@ function renderOrdersList() {
         <span>Lợi nhuận</span>
         <strong>${moneyFormatter.format(order.profit)}</strong>
       </div>
+      <div class="form-actions order-actions">
+        <button class="edit-btn" type="button">Sửa note</button>
+      </div>
     `;
 
+    card.querySelector('.edit-btn').addEventListener('click', () => editOrder(order.id));
     el.ordersList.appendChild(card);
   });
+}
+
+function editOrder(orderId) {
+  const order = state.orders.find((entry) => entry.id === orderId);
+  if (!order) return;
+
+  state.editingOrderId = order.id;
+  state.cart = order.items.map((item) => ({ ...item }));
+  el.pickupName.value = order.customerName;
+  el.pickupTime.value = order.pickupTime ? toLocalDateTimeInputValue(new Date(order.pickupTime)) : '';
+  el.transferPaid.value = String(isTransferPaid(order));
+  el.orderFormTitle.textContent = 'Chỉnh sửa note bán hàng';
+  el.orderForm.querySelector('button[type="submit"]').textContent = 'Cập nhật note';
+  el.cancelOrderEdit.hidden = false;
+  renderCart();
+  switchTab('orders-section');
+  el.orderForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelOrderEdit() {
+  state.editingOrderId = null;
+  state.cart = [];
+  el.orderForm.reset();
+  resetOrderEditControls();
+  renderCart();
+  hydrateDateInputs();
+}
+
+function resetOrderEditControls() {
+  el.orderFormTitle.textContent = 'Ghi note bán hàng';
+  el.orderForm.querySelector('button[type="submit"]').textContent = 'Lưu note bán hàng';
+  el.cancelOrderEdit.hidden = true;
 }
 
 function updateStatsInputType() {
@@ -433,6 +539,72 @@ function renderStats() {
   el.statCost.textContent = moneyFormatter.format(totalCost);
   el.statProfit.textContent = moneyFormatter.format(totalProfit);
   el.statOrders.textContent = String(filteredOrders.length);
+  renderBarChart(
+    el.itemStatsChart,
+    aggregateStats(filteredOrders, (order) => order.items.map((item) => ({
+      name: item.name,
+      value: Number(item.quantity || 0) * Number(item.sellingPrice || 0)
+    })))
+  );
+  renderBarChart(
+    el.customerStatsChart,
+    aggregateStats(filteredOrders, (order) => [{ name: order.customerName || 'Chưa rõ', value: Number(order.totalRevenue || 0) }])
+  );
+}
+
+function aggregateStats(orders, getEntries) {
+  const totals = new Map();
+  orders.forEach((order) => {
+    getEntries(order).forEach(({ name, value }) => {
+      totals.set(name, (totals.get(name) || 0) + value);
+    });
+  });
+  return [...totals.entries()]
+    .map(([name, value]) => ({ name, value }))
+    .sort((left, right) => right.value - left.value)
+    .slice(0, 8);
+}
+
+function renderBarChart(container, entries) {
+  container.innerHTML = '';
+  if (entries.length === 0) {
+    container.innerHTML = '<p>Chưa có dữ liệu trong khoảng thời gian này.</p>';
+    return;
+  }
+
+  const maxValue = entries[0].value || 1;
+  entries.forEach(({ name, value }) => {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    const label = document.createElement('div');
+    label.className = 'bar-label';
+    label.textContent = name;
+    const track = document.createElement('div');
+    track.className = 'bar-track';
+    const bar = document.createElement('div');
+    bar.className = 'bar-fill';
+    bar.style.width = `${Math.max((value / maxValue) * 100, 2)}%`;
+    bar.setAttribute('aria-label', `${name}: ${moneyFormatter.format(value)}`);
+    track.appendChild(bar);
+    const amount = document.createElement('strong');
+    amount.textContent = moneyFormatter.format(value);
+    row.append(label, track, amount);
+    container.appendChild(row);
+  });
+}
+
+function isTransferPaid(order) {
+  return order.transferPaid === true || order.transferPaid === 'true' || order.transferPaid === 'yes';
+}
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character]);
 }
 
 function matchesRange(dateValue, range, filterValue) {
