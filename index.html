@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Order Notes</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="config.js"></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Quản lý bán hàng</p>
+          <h1>Order Notes</h1>
+        </div>
+        <button id="sync-btn" class="ghost-btn" type="button">Đồng bộ dữ liệu</button>
+      </header>
+
+      <nav class="tabs" aria-label="Tabs">
+        <button class="tab-btn active" type="button" data-target="items-section">1. Tạo món hàng</button>
+        <button class="tab-btn" type="button" data-target="orders-section">2. Ghi note bán hàng</button>
+        <button class="tab-btn" type="button" data-target="stats-section">3. Thống kê</button>
+      </nav>
+
+      <main>
+        <section id="items-section" class="tab-pane active">
+          <div class="panel">
+            <h2>Thêm món hàng</h2>
+            <form id="item-form" class="stack-form">
+              <div class="grid two-columns">
+                <label>
+                  <span>Tên món</span>
+                  <input id="item-name" name="itemName" type="text" placeholder="VD: Cà phê sữa" required />
+                </label>
+                <label>
+                  <span>Giá bán</span>
+                  <input id="item-price" name="sellingPrice" type="number" min="0" step="1000" placeholder="20000" required />
+                </label>
+                <label>
+                  <span>Giá cost</span>
+                  <input id="item-cost" name="cost" type="number" min="0" step="1000" placeholder="12000" required />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary-btn">Lưu món</button>
+                <button type="reset" class="secondary-btn">Xóa form</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="panel">
+            <div class="section-heading">
+              <h2>Danh sách món</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tên món</th>
+                    <th>Giá bán</th>
+                    <th>Giá cost</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="items-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="orders-section" class="tab-pane">
+          <div class="panel">
+            <h2>Ghi note bán hàng</h2>
+            <form id="order-form" class="stack-form">
+              <div class="grid two-columns">
+                <label>
+                  <span>Chọn món</span>
+                  <select id="order-item-select"></select>
+                </label>
+                <label>
+                  <span>Số lượng</span>
+                  <input id="order-item-qty" type="number" min="1" value="1" />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="button" id="add-order-item" class="secondary-btn">Thêm món vào đơn</button>
+              </div>
+
+              <div id="order-cart" class="cart-list" aria-live="polite"></div>
+
+              <div class="grid two-columns">
+                <label>
+                  <span>Thời gian lấy</span>
+                  <input id="pickup-time" type="datetime-local" />
+                </label>
+                <label>
+                  <span>Tên người lấy (Zalo/Facebook)</span>
+                  <input id="pickup-name" type="text" placeholder="VD: Bảo, Hạnh" required />
+                </label>
+              </div>
+
+              <div class="summary-box">
+                <div>
+                  <span>Tổng doanh thu</span>
+                  <strong id="cart-total-revenue">0đ</strong>
+                </div>
+                <div>
+                  <span>Tổng lời</span>
+                  <strong id="cart-total-profit">0đ</strong>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="primary-btn">Lưu note bán hàng</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="panel">
+            <div class="section-heading">
+              <h2>Danh sách note</h2>
+            </div>
+            <div id="orders-list" class="orders-list"></div>
+          </div>
+        </section>
+
+        <section id="stats-section" class="tab-pane">
+          <div class="panel">
+            <h2>Thống kê bán hàng</h2>
+            <div class="filter-row">
+              <label>
+                <span>Loại thống kê</span>
+                <select id="stats-range">
+                  <option value="day">Theo ngày</option>
+                  <option value="month">Theo tháng</option>
+                  <option value="year">Theo năm</option>
+                </select>
+              </label>
+              <label>
+                <span>Chọn thời gian</span>
+                <input id="stats-date" type="date" />
+              </label>
+              <button id="refresh-stats" class="primary-btn" type="button">Xem thống kê</button>
+            </div>
+
+            <div class="stats-grid">
+              <div class="stat-card revenue">
+                <span>Doanh thu</span>
+                <strong id="stat-revenue">0đ</strong>
+              </div>
+              <div class="stat-card profit">
+                <span>Lợi nhuận</span>
+                <strong id="stat-profit">0đ</strong>
+              </div>
+              <div class="stat-card cost">
+                <span>Chi phí</span>
+                <strong id="stat-cost">0đ</strong>
+              </div>
+              <div class="stat-card orders">
+                <span>Số đơn</span>
+                <strong id="stat-orders">0</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+  </body>
+</html>
