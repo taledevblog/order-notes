@@ -300,6 +300,27 @@ th {
   gap: 14px;
 }
 
+.orders-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.orders-pagination .secondary-btn {
+  width: auto;
+}
+
+.orders-pagination[hidden] {
+  display: none;
+}
+
+.orders-pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .order-card {
   padding: 16px 18px;
   border: 1px solid var(--line);
@@ -700,8 +721,7 @@ body.bill-modal-open {
 
 .bill-header p,
 .bill-meta,
-.bill-customer,
-.bill-payment-status {
+.bill-customer {
   margin: 6px 0;
 }
 

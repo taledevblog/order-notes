@@ -14,7 +14,7 @@ Một web app đơn giản để quản lý món hàng và ghi note bán hàng, 
   - Số lượng
   - Thời gian lấy (tuỳ chọn)
   - Tên người lấy (Zalo/Facebook)
-  - Đánh dấu đã/chưa chuyển khoản, lọc, chỉnh sửa, xóa note (có xác nhận) và xem bill kèm mã QR trên màn hình
+  - Đánh dấu đã/chưa chuyển khoản, lọc, chỉnh sửa, xóa note (có xác nhận), phân trang 10 note mới nhất và xem/tải bill kèm mã QR
 - Màn hình 3: thống kê
   - Theo ngày / tháng / năm
   - Doanh thu

@@ -6,8 +6,11 @@ const state = {
   editingItemId: null,
   editingOrderId: null,
   activeBillId: null,
-  busyCount: 0
+  busyCount: 0,
+  ordersPage: 1
 };
+
+const ORDERS_PER_PAGE = 10;
 
 const moneyFormatter = new Intl.NumberFormat('vi-VN', {
   style: 'currency',
@@ -45,6 +48,10 @@ function cacheElements() {
   el.cartTotalProfit = document.getElementById('cart-total-profit');
   el.ordersList = document.getElementById('orders-list');
   el.paymentFilter = document.getElementById('payment-filter');
+  el.ordersPagination = document.getElementById('orders-pagination');
+  el.ordersPrev = document.getElementById('orders-prev');
+  el.ordersNext = document.getElementById('orders-next');
+  el.ordersPageInfo = document.getElementById('orders-page-info');
   el.syncButton = document.getElementById('sync-btn');
   el.toasts = document.getElementById('toast');
   el.loadingOverlay = document.getElementById('loading-overlay');
@@ -76,7 +83,12 @@ function bindEvents() {
   el.cancelOrderEdit.addEventListener('click', cancelOrderEdit);
   el.addOrderItem.addEventListener('click', addOrderItemToCart);
   el.syncButton.addEventListener('click', loadData);
-  el.paymentFilter.addEventListener('change', renderOrdersList);
+  el.paymentFilter.addEventListener('change', () => {
+    state.ordersPage = 1;
+    renderOrdersList();
+  });
+  el.ordersPrev.addEventListener('click', () => changeOrdersPage(-1));
+  el.ordersNext.addEventListener('click', () => changeOrdersPage(1));
   el.refreshStats.addEventListener('click', renderStats);
   el.statsRange.addEventListener('change', updateStatsInputType);
   el.closeBill.addEventListener('click', closeBill);
@@ -418,6 +430,7 @@ async function saveOrder(event) {
       state.orders[existingIndex] = order;
     } else {
       state.orders.push(order);
+      state.ordersPage = 1;
     }
     persistLocalDemoData();
     state.cart = [];
@@ -443,6 +456,7 @@ async function saveOrder(event) {
       state.orders[existingIndex] = order;
     } else {
       state.orders.push(order);
+      state.ordersPage = 1;
     }
     persistLocalDemoData();
     state.cart = [];
@@ -493,12 +507,25 @@ function renderOrdersList() {
     return true;
   });
 
-  if (filteredOrders.length === 0) {
-    el.ordersList.innerHTML = '<p>Chưa có đơn hàng nào.</p>';
+  const sortedOrders = filteredOrders.sort((left, right) => {
+    const leftTime = Date.parse(left.orderedAt || '') || 0;
+    const rightTime = Date.parse(right.orderedAt || '') || 0;
+    return rightTime - leftTime || String(right.id).localeCompare(String(left.id));
+  });
+  const pageCount = Math.max(1, Math.ceil(sortedOrders.length / ORDERS_PER_PAGE));
+  state.ordersPage = Math.min(Math.max(state.ordersPage, 1), pageCount);
+  el.ordersPagination.hidden = sortedOrders.length <= ORDERS_PER_PAGE;
+  el.ordersPageInfo.textContent = `Trang ${state.ordersPage}/${pageCount} · ${sortedOrders.length} note`;
+  el.ordersPrev.disabled = state.ordersPage === 1;
+  el.ordersNext.disabled = state.ordersPage === pageCount;
+
+  if (sortedOrders.length === 0) {
+    el.ordersList.innerHTML = '<p>Không có note phù hợp.</p>';
     return;
   }
 
-  [...filteredOrders].reverse().forEach((order) => {
+  const pageStart = (state.ordersPage - 1) * ORDERS_PER_PAGE;
+  sortedOrders.slice(pageStart, pageStart + ORDERS_PER_PAGE).forEach((order) => {
     const card = document.createElement('div');
     card.className = 'order-card';
     const orderDate = new Date(order.orderedAt);
@@ -546,6 +573,11 @@ function renderOrdersList() {
   });
 }
 
+function changeOrdersPage(direction) {
+  state.ordersPage += direction;
+  renderOrdersList();
+}
+
 function showBill(orderId) {
   const order = state.orders.find((entry) => entry.id === orderId);
   if (!order) return;
@@ -564,7 +596,6 @@ function showBill(orderId) {
     `;
   }).join('');
 
-  const createdAt = formatBillDate(order.orderedAt);
   const pickupTime = order.pickupTime ? formatBillDate(order.pickupTime) : '';
   el.billPreview.innerHTML = `
     <header class="bill-header">
@@ -572,8 +603,7 @@ function showBill(orderId) {
       <p>HÓA ĐƠN BÁN HÀNG</p>
     </header>
     <div class="bill-customer"><span>Khách hàng</span><strong>${escapeHtml(order.customerName)}</strong></div>
-    ${createdAt ? `<p class="bill-meta">Ngày tạo: ${createdAt}</p>` : ''}
-    ${pickupTime ? `<p class="bill-meta">Thời gian lấy: ${pickupTime}</p>` : ''}
+    ${pickupTime ? `<p class="bill-meta">Thời gian: ${pickupTime}</p>` : ''}
     <table class="bill-table">
       <thead>
         <tr><th>#</th><th>Món</th><th>SL</th><th>Thành tiền</th></tr>
@@ -581,7 +611,6 @@ function showBill(orderId) {
       <tbody>${itemRows}</tbody>
     </table>
     <div class="bill-total"><span>Tổng cộng</span><strong>${moneyFormatter.format(order.totalRevenue)}</strong></div>
-    <p class="bill-payment-status">Chuyển khoản: ${isTransferPaid(order) ? 'Đã nhận' : 'Chưa nhận'}</p>
     <div class="bill-qr">
       <p>Mã QR chuyển khoản</p>
       <img src="./bank.jpg" alt="Mã QR chuyển khoản Bếp Nhà Mía" />
@@ -705,10 +734,8 @@ function createBillCanvas(order, qrImage) {
   y = writeText('Khách hàng', padding, y, contentWidth, '22px Arial', '#475569', 'left', 30);
   y = writeText(order.customerName || '', padding, y + 2, contentWidth, 'bold 28px Arial', '#111827', 'left', 36);
 
-  const createdAt = formatBillDate(order.orderedAt);
   const pickupTime = order.pickupTime ? formatBillDate(order.pickupTime) : '';
-  if (createdAt) y = writeText(`Ngày tạo: ${createdAt}`, padding, y + 4, contentWidth, '20px Arial', '#475569', 'left', 28);
-  if (pickupTime) y = writeText(`Thời gian lấy: ${pickupTime}`, padding, y + 2, contentWidth, '20px Arial', '#475569', 'left', 28);
+  if (pickupTime) y = writeText(`Thời gian: ${pickupTime}`, padding, y + 4, contentWidth, '20px Arial', '#475569', 'left', 28);
   y += 8;
   drawRule();
 
@@ -771,8 +798,6 @@ function createBillCanvas(order, qrImage) {
   context.fillStyle = '#111827';
   context.fillText(moneyFormatter.format(order.totalRevenue), amountX, y - 34);
   y += 14;
-  y = writeText(`Chuyển khoản: ${isTransferPaid(order) ? 'Đã nhận' : 'Chưa nhận'}`, padding, y, contentWidth, '20px Arial', '#475569', 'left', 28);
-  y += 12;
   drawRule();
   y = writeText('Mã QR chuyển khoản', width / 2, y + 18, contentWidth, 'bold 24px Arial', '#111827', 'center', 32);
 
