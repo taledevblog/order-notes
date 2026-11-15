@@ -62,6 +62,22 @@ function orderTimestamp_(value) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
+function pickupDate_(value, timezoneOffset) {
+  if (typeof value === 'string') {
+    const localDate = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
+    if (localDate && !hasTimezone) return localDate[1];
+  }
+
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return '';
+  return Utilities.formatDate(
+    new Date(timestamp - timezoneOffset * 60000),
+    'GMT',
+    'yyyy-MM-dd'
+  );
+}
+
 function listItems_() {
   const sheet = ensureSheet_(SHEET_NAMES.items);
   ensureHeaders_(sheet, ['id', 'name', 'sellingPrice', 'cost']);
@@ -115,10 +131,13 @@ function listOrdersPage_(filter = {}) {
 
   const values = sheet.getDataRange().getValues();
   const customerSearch = String(filter.customerSearch || '').trim().toLowerCase();
+  const orderDate = String(filter.orderDate || '').trim();
+  const timezoneOffset = Number(filter.dateTimezoneOffsetMinutes) || 0;
   const paymentFilter = filter.paymentFilter || 'all';
   const matchingRows = values.slice(1).filter((row) => {
     if (!(row[0] || row[1])) return false;
     if (customerSearch && !String(row[1] || '').toLowerCase().includes(customerSearch)) return false;
+    if (orderDate && pickupDate_(row[2], timezoneOffset) !== orderDate) return false;
     if (paymentFilter === 'paid') return isTransferPaid_(row[8]);
     if (paymentFilter === 'unpaid') return !isTransferPaid_(row[8]);
     return true;

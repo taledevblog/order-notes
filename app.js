@@ -11,6 +11,8 @@ const state = {
   ordersTotal: 0,
   ordersFromSheets: false,
   customerSearchQuery: '',
+  ordersDateQuery: '',
+  ordersDateTimezoneOffset: 0,
   customerSuggestionTimer: null,
   customerSuggestionRequestId: 0
 };
@@ -57,6 +59,7 @@ function cacheElements() {
   el.ordersList = document.getElementById('orders-list');
   el.paymentFilter = document.getElementById('payment-filter');
   el.customerSearch = document.getElementById('customer-search');
+  el.ordersDateFilter = document.getElementById('orders-date-filter');
   el.searchCustomer = document.getElementById('search-customer');
   el.ordersPagination = document.getElementById('orders-pagination');
   el.ordersPrev = document.getElementById('orders-prev');
@@ -103,11 +106,17 @@ function bindEvents() {
       renderOrdersList();
     }
   });
-  el.searchCustomer.addEventListener('click', searchCustomers);
+  el.searchCustomer.addEventListener('click', searchOrders);
   el.customerSearch.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      searchCustomers();
+      searchOrders();
+    }
+  });
+  el.ordersDateFilter.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      searchOrders();
     }
   });
   el.ordersPrev.addEventListener('click', () => changeOrdersPage(-1));
@@ -148,7 +157,9 @@ async function loadData() {
           page: 1,
           pageSize: ORDERS_PER_PAGE,
           paymentFilter: el.paymentFilter.value,
-          customerSearch: state.customerSearchQuery
+          customerSearch: state.customerSearchQuery,
+          orderDate: state.ordersDateQuery,
+          dateTimezoneOffsetMinutes: state.ordersDateTimezoneOffset
         })
       ]);
 
@@ -205,7 +216,9 @@ async function fetchOrdersPage(page) {
     page,
     pageSize: ORDERS_PER_PAGE,
     paymentFilter: el.paymentFilter.value,
-    customerSearch: state.customerSearchQuery
+    customerSearch: state.customerSearchQuery,
+    orderDate: state.ordersDateQuery,
+    dateTimezoneOffsetMinutes: state.ordersDateTimezoneOffset
   });
   const result = response.data;
   if (!result || !Array.isArray(result.orders) || !Number.isFinite(Number(result.total))) {
@@ -666,7 +679,11 @@ function renderOrdersList() {
 
   const filteredOrders = state.ordersFromSheets
     ? [...state.orders]
-    : state.orders.filter((order) => matchesPaymentFilter(order) && matchesCustomerSearch(order));
+    : state.orders.filter((order) => (
+      matchesPaymentFilter(order) &&
+      matchesCustomerSearch(order) &&
+      matchesOrderDate(order)
+    ));
   const sortedOrders = filteredOrders.sort((left, right) => {
     const leftTime = Date.parse(left.orderedAt || '') || 0;
     const rightTime = Date.parse(right.orderedAt || '') || 0;
@@ -746,8 +763,10 @@ function changeOrdersPage(direction) {
   loadOrdersPage(state.ordersPage + direction);
 }
 
-function searchCustomers() {
+function searchOrders() {
   state.customerSearchQuery = el.customerSearch.value.trim();
+  state.ordersDateQuery = el.ordersDateFilter.value;
+  state.ordersDateTimezoneOffset = getDateTimezoneOffset(state.ordersDateQuery);
   state.ordersPage = 1;
   if (state.ordersFromSheets) {
     loadOrdersPage(1);
@@ -765,6 +784,24 @@ function matchesPaymentFilter(order) {
 function matchesCustomerSearch(order) {
   const search = state.customerSearchQuery.toLowerCase();
   return !search || String(order.customerName || '').toLowerCase().includes(search);
+}
+
+function matchesOrderDate(order) {
+  if (!state.ordersDateQuery) return true;
+  const date = new Date(order.pickupTime);
+  if (Number.isNaN(date.getTime())) return false;
+  return formatLocalDate(date) === state.ordersDateQuery;
+}
+
+function getDateTimezoneOffset(dateValue) {
+  return dateValue ? new Date(`${dateValue}T12:00:00`).getTimezoneOffset() : 0;
+}
+
+function formatLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function getOrderTotal(order) {
