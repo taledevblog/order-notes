@@ -14,7 +14,7 @@ Một web app đơn giản để quản lý món hàng và ghi note bán hàng, 
   - Số lượng
   - Thời gian lấy (tuỳ chọn)
   - Tên người lấy (Zalo/Facebook)
-  - Đánh dấu đã/chưa chuyển khoản, lọc note theo trạng thái và chỉnh sửa note
+  - Đánh dấu đã/chưa chuyển khoản, lọc, chỉnh sửa và xóa note (có xác nhận)
 - Màn hình 3: thống kê
   - Theo ngày / tháng / năm
   - Doanh thu
@@ -22,6 +22,7 @@ Một web app đơn giản để quản lý món hàng và ghi note bán hàng, 
   - Chi phí
   - Số đơn hàng
   - Biểu đồ doanh thu theo món và khách hàng
+- Hiển thị vòng xoay khi tải hoặc lưu dữ liệu
 
 ## Cấu trúc dự án
 

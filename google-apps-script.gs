@@ -125,6 +125,20 @@ function saveOrder_(order) {
   return { ...order, id: row[0] };
 }
 
+function deleteOrder_(orderId) {
+  const sheet = ensureSheet_(SHEET_NAMES.orders);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid']);
+
+  const values = sheet.getDataRange().getValues();
+  const existingIndex = values.findIndex((row, index) => index > 0 && String(row[0]) === String(orderId));
+  if (existingIndex < 1) {
+    return { deleted: false };
+  }
+
+  sheet.deleteRow(existingIndex + 1);
+  return { deleted: true };
+}
+
 function getStats_(filter = {}) {
   const orders = listOrders_();
   const range = filter.range || 'day';
@@ -181,6 +195,9 @@ function doPost(e) {
         break;
       case 'saveOrder':
         data = saveOrder_(payload.order || payload);
+        break;
+      case 'deleteOrder':
+        data = deleteOrder_(payload.orderId);
         break;
       case 'getStats':
         data = getStats_(payload || {});

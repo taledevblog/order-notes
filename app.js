@@ -4,7 +4,8 @@ const state = {
   orders: [],
   cart: [],
   editingItemId: null,
-  editingOrderId: null
+  editingOrderId: null,
+  busyCount: 0
 };
 
 const moneyFormatter = new Intl.NumberFormat('vi-VN', {
@@ -45,6 +46,8 @@ function cacheElements() {
   el.paymentFilter = document.getElementById('payment-filter');
   el.syncButton = document.getElementById('sync-btn');
   el.toasts = document.getElementById('toast');
+  el.loadingOverlay = document.getElementById('loading-overlay');
+  el.loadingMessage = document.getElementById('loading-message');
   el.statsRange = document.getElementById('stats-range');
   el.statsDate = document.getElementById('stats-date');
   el.refreshStats = document.getElementById('refresh-stats');
@@ -87,6 +90,7 @@ function switchTab(targetId) {
 }
 
 async function loadData() {
+  await beginBusy('Đang tải dữ liệu...');
   try {
     if (config.useGoogleSheets && config.scriptUrl && !config.scriptUrl.includes('PASTE')) {
       showToast('Đang đồng bộ dữ liệu từ Google Sheets...');
@@ -125,7 +129,21 @@ async function loadData() {
     renderItemsTable();
     renderOrdersList();
     renderStats();
+  } finally {
+    endBusy();
   }
+}
+
+function beginBusy(message) {
+  state.busyCount += 1;
+  el.loadingMessage.textContent = message;
+  el.loadingOverlay.hidden = false;
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
+}
+
+function endBusy() {
+  state.busyCount = Math.max(0, state.busyCount - 1);
+  el.loadingOverlay.hidden = state.busyCount === 0;
 }
 
 function persistLocalDemoData() {
@@ -155,6 +173,7 @@ async function saveItem(event) {
     cost: Number(rawItem.cost)
   };
 
+  await beginBusy('Đang lưu món hàng...');
   try {
     if (config.useGoogleSheets && config.scriptUrl && !config.scriptUrl.includes('PASTE')) {
       await callSheetAction('saveItem', { item });
@@ -196,6 +215,8 @@ async function saveItem(event) {
     renderItemOptions();
     renderItemsTable();
     event.target.reset();
+  } finally {
+    endBusy();
   }
 }
 
@@ -374,6 +395,7 @@ async function saveOrder(event) {
     profit: state.cart.reduce((sum, item) => sum + item.quantity * (item.sellingPrice - item.cost), 0)
   };
 
+  await beginBusy(state.editingOrderId ? 'Đang cập nhật note...' : 'Đang lưu note...');
   try {
     if (config.useGoogleSheets && config.scriptUrl && !config.scriptUrl.includes('PASTE')) {
       await callSheetAction('saveOrder', { order });
@@ -419,6 +441,34 @@ async function saveOrder(event) {
     el.orderForm.reset();
     resetOrderEditControls();
     hydrateDateInputs();
+  } finally {
+    endBusy();
+  }
+}
+
+async function deleteOrder(orderId) {
+  const order = state.orders.find((entry) => entry.id === orderId);
+  if (!order || !window.confirm(`Bạn có chắc muốn xóa note của "${order.customerName}" không?`)) return;
+
+  await beginBusy('Đang xóa note bán hàng...');
+  try {
+    if (config.useGoogleSheets && config.scriptUrl && !config.scriptUrl.includes('PASTE')) {
+      const result = await callSheetAction('deleteOrder', { orderId });
+      if (!result.data || !result.data.deleted) {
+        throw new Error('Google Sheets không tìm thấy note cần xóa.');
+      }
+    }
+
+    state.orders = state.orders.filter((entry) => entry.id !== orderId);
+    persistLocalDemoData();
+    renderOrdersList();
+    renderStats();
+    showToast('Đã xóa note bán hàng.');
+  } catch (error) {
+    console.error(error);
+    showToast('Không thể xóa note trên Google Sheets. Note vẫn được giữ lại.');
+  } finally {
+    endBusy();
   }
 }
 
@@ -472,10 +522,12 @@ function renderOrdersList() {
       </div>
       <div class="form-actions order-actions">
         <button class="edit-btn" type="button">Sửa note</button>
+        <button class="delete-btn" type="button">Xóa note</button>
       </div>
     `;
 
     card.querySelector('.edit-btn').addEventListener('click', () => editOrder(order.id));
+    card.querySelector('.delete-btn').addEventListener('click', () => deleteOrder(order.id));
     el.ordersList.appendChild(card);
   });
 }
