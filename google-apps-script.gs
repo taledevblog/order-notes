@@ -47,7 +47,8 @@ function normalizeOrderRow_(row) {
     totalCost: Number(row[6] || 0),
     profit: Number(row[7] || 0),
     transferPaid: isTransferPaid_(row[8]),
-    notes: row[9] || ''
+    notes: row[9] || '',
+    shippingFee: Number(row[10] || 0)
   };
 }
 
@@ -98,7 +99,7 @@ function saveItem_(item) {
 
 function listOrders_() {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
 
   const values = sheet.getDataRange().getValues();
   if (values.length <= 1) {
@@ -110,7 +111,7 @@ function listOrders_() {
 
 function listOrdersPage_(filter = {}) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
 
   const values = sheet.getDataRange().getValues();
   const customerSearch = String(filter.customerSearch || '').trim().toLowerCase();
@@ -142,9 +143,36 @@ function listOrdersPage_(filter = {}) {
   };
 }
 
+function searchCustomers_(query) {
+  const search = String(query || '').trim().toLowerCase();
+  if (!search) return [];
+
+  const sheet = ensureSheet_(SHEET_NAMES.orders);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
+  const values = sheet.getDataRange().getValues();
+  const customers = new Map();
+
+  values.slice(1).forEach((row) => {
+    const name = String(row[1] || '').trim();
+    if (!name || !name.toLowerCase().includes(search)) return;
+
+    const key = name.toLowerCase();
+    const timestamp = orderTimestamp_(row[3]);
+    const existing = customers.get(key);
+    if (!existing || timestamp > existing.timestamp) {
+      customers.set(key, { name, timestamp });
+    }
+  });
+
+  return [...customers.values()]
+    .sort((left, right) => right.timestamp - left.timestamp)
+    .slice(0, 10)
+    .map((customer) => customer.name);
+}
+
 function saveOrder_(order) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
 
   const row = [
     order.id || Utilities.getUuid(),
@@ -156,7 +184,8 @@ function saveOrder_(order) {
     Number(order.totalCost || 0),
     Number(order.profit || 0),
     Boolean(order.transferPaid),
-    String(order.notes || '')
+    String(order.notes || ''),
+    Number(order.shippingFee || 0)
   ];
 
   const values = sheet.getDataRange().getValues();
@@ -173,7 +202,7 @@ function saveOrder_(order) {
 
 function deleteOrder_(orderId) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes']);
+  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
 
   const values = sheet.getDataRange().getValues();
   const existingIndex = values.findIndex((row, index) => index > 0 && String(row[0]) === String(orderId));
@@ -262,6 +291,9 @@ function doPost(e) {
         break;
       case 'listOrdersPage':
         data = listOrdersPage_(payload || {});
+        break;
+      case 'searchCustomers':
+        data = searchCustomers_(payload.query);
         break;
       case 'saveOrder':
         data = saveOrder_(payload.order || payload);

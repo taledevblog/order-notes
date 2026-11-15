@@ -13,7 +13,9 @@ Một web app đơn giản để quản lý món hàng và ghi note bán hàng, 
   - Chọn nhiều món trong 1 đơn hàng
   - Số lượng
   - Thời gian lấy (tuỳ chọn)
+  - Phí ship mặc định 0, được cộng vào số tiền khách thanh toán nhưng không tính vào doanh thu/lợi nhuận
   - Tên người lấy (Zalo/Facebook)
+  - Gợi ý khách cũ khi nhập tên; có thể nhập tên mới nếu chưa có
   - Ghi chú đơn hàng
   - Tìm theo tên khách hàng
   - Đánh dấu đã/chưa chuyển khoản, lọc, chỉnh sửa, xóa note (có xác nhận), phân trang phía máy chủ (chỉ tải 10 note mỗi lần) và xem/tải bill kèm mã QR
@@ -102,7 +104,7 @@ window.ORDER_NOTES_CONFIG = {
 - Frontend gửi JSON với `Content-Type: text/plain` để tránh yêu cầu CORS preflight; Apps Script vẫn đọc nội dung JSON như bình thường.
 - Nếu vừa cập nhật Apps Script, hãy tạo deployment version mới rồi kiểm tra lại.
 - Phân trang note và thống kê phía Google Sheets cần triển khai phiên bản Apps Script mới nhất trong `google-apps-script.gs`.
-- Cột `notes` cho ghi chú đơn hàng sẽ được Apps Script tự thêm vào sheet `orders` khi tải danh sách hoặc lưu note.
+- Các cột `notes` và `shippingFee` sẽ được Apps Script tự thêm vào sheet `orders` khi tải danh sách hoặc lưu note.
 - Nếu kết nối thất bại, ứng dụng sẽ chuyển sang `localStorage` trên thiết bị hiện tại; dữ liệu đó không tự đồng bộ lên Google Sheets.
 
 ## Lưu ý

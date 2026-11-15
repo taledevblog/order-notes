@@ -10,7 +10,9 @@ const state = {
   ordersPage: 1,
   ordersTotal: 0,
   ordersFromSheets: false,
-  customerSearchQuery: ''
+  customerSearchQuery: '',
+  customerSuggestionTimer: null,
+  customerSuggestionRequestId: 0
 };
 
 const ORDERS_PER_PAGE = 10;
@@ -46,7 +48,9 @@ function cacheElements() {
   el.orderCart = document.getElementById('order-cart');
   el.pickupTime = document.getElementById('pickup-time');
   el.pickupName = document.getElementById('pickup-name');
+  el.customerSuggestions = document.getElementById('customer-suggestions');
   el.transferPaid = document.getElementById('transfer-paid');
+  el.shippingFee = document.getElementById('shipping-fee');
   el.orderNotes = document.getElementById('order-notes');
   el.cartTotalRevenue = document.getElementById('cart-total-revenue');
   el.cartTotalProfit = document.getElementById('cart-total-profit');
@@ -86,6 +90,8 @@ function bindEvents() {
   el.itemForm.addEventListener('reset', cancelItemEdit);
   el.cancelItemEdit.addEventListener('click', () => el.itemForm.reset());
   el.orderForm.addEventListener('submit', saveOrder);
+  el.pickupName.addEventListener('input', scheduleCustomerSuggestions);
+  el.shippingFee.addEventListener('input', renderCart);
   el.cancelOrderEdit.addEventListener('click', cancelOrderEdit);
   el.addOrderItem.addEventListener('click', addOrderItemToCart);
   el.syncButton.addEventListener('click', loadData);
@@ -353,6 +359,56 @@ function renderItemOptions() {
   });
 }
 
+function scheduleCustomerSuggestions() {
+  window.clearTimeout(state.customerSuggestionTimer);
+  const query = el.pickupName.value.trim();
+  if (!query) {
+    state.customerSuggestionRequestId += 1;
+    renderCustomerSuggestions([]);
+    return;
+  }
+
+  state.customerSuggestionTimer = window.setTimeout(() => {
+    loadCustomerSuggestions(query);
+  }, 250);
+}
+
+async function loadCustomerSuggestions(query) {
+  const requestId = ++state.customerSuggestionRequestId;
+  try {
+    let names;
+    if (state.ordersFromSheets) {
+      const response = await callSheetAction('searchCustomers', { query });
+      if (!Array.isArray(response.data)) {
+        throw new Error('CUSTOMER_SUGGESTIONS_INVALID');
+      }
+      names = response.data;
+    } else {
+      const search = query.toLowerCase();
+      names = [...new Set(state.orders
+        .map((order) => String(order.customerName || '').trim())
+        .filter((name) => name && name.toLowerCase().includes(search)))]
+        .slice(0, 10);
+    }
+
+    if (requestId !== state.customerSuggestionRequestId || query !== el.pickupName.value.trim()) return;
+    renderCustomerSuggestions(names);
+  } catch (error) {
+    if (requestId !== state.customerSuggestionRequestId) return;
+    console.error(error);
+    showToast('Không thể tải gợi ý khách hàng.');
+  }
+}
+
+function renderCustomerSuggestions(names) {
+  el.customerSuggestions.replaceChildren();
+  names.forEach((name) => {
+    const option = document.createElement('option');
+    option.value = name;
+    el.customerSuggestions.appendChild(option);
+  });
+}
+
 function renderItemsTable() {
   el.itemTableBody.innerHTML = '';
 
@@ -420,10 +476,11 @@ function addOrderItemToCart() {
 
 function renderCart() {
   el.orderCart.innerHTML = '';
+  const shippingFee = Number(el.shippingFee.value || 0);
 
   if (state.cart.length === 0) {
     el.orderCart.innerHTML = '<p>Chưa có món nào trong đơn hàng.</p>';
-    el.cartTotalRevenue.textContent = moneyFormatter.format(0);
+    el.cartTotalRevenue.textContent = moneyFormatter.format(shippingFee);
     el.cartTotalProfit.textContent = moneyFormatter.format(0);
     return;
   }
@@ -458,7 +515,7 @@ function renderCart() {
     el.orderCart.appendChild(itemCard);
   });
 
-  el.cartTotalRevenue.textContent = moneyFormatter.format(totalRevenue);
+  el.cartTotalRevenue.textContent = moneyFormatter.format(totalRevenue + shippingFee);
   el.cartTotalProfit.textContent = moneyFormatter.format(totalProfit);
 }
 
@@ -483,6 +540,7 @@ async function saveOrder(event) {
     pickupTime: el.pickupTime.value || new Date().toISOString(),
     orderedAt: previousOrder ? previousOrder.orderedAt : new Date().toISOString(),
     transferPaid: el.transferPaid.value === 'true',
+    shippingFee: Number(el.shippingFee.value || 0),
     notes: el.orderNotes.value.trim(),
     items: state.cart.map((item) => ({
       id: item.id,
@@ -524,8 +582,8 @@ async function saveOrder(event) {
 
     state.cart = [];
     state.editingOrderId = null;
-    renderCart();
     el.orderForm.reset();
+    renderCart();
     resetOrderEditControls();
     hydrateDateInputs();
     showToast(listRefreshFailed
@@ -555,10 +613,10 @@ async function saveOrder(event) {
     persistLocalDemoData();
     state.cart = [];
     state.editingOrderId = null;
+    el.orderForm.reset();
     renderCart();
     renderOrdersList();
     renderStats();
-    el.orderForm.reset();
     resetOrderEditControls();
     hydrateDateInputs();
   } finally {
@@ -643,7 +701,7 @@ function renderOrdersList() {
           <div><small>${formatDisplayDate(orderDate)}</small></div>
         </div>
         <div>
-          <strong>${moneyFormatter.format(order.totalRevenue)}</strong>
+          <strong>${moneyFormatter.format(getOrderTotal(order))}</strong>
         </div>
       </div>
       <div class="order-status ${isTransferPaid(order) ? 'paid' : 'unpaid'}">
@@ -661,6 +719,10 @@ function renderOrdersList() {
             `
           )
           .join('')}
+      </div>
+      <div class="order-item-line" style="margin-top: 12px;">
+        <span>Phí ship</span>
+        <span>${moneyFormatter.format(order.shippingFee || 0)}</span>
       </div>
       <div class="order-item-line" style="margin-top: 12px;">
         <span>Lợi nhuận</span>
@@ -705,6 +767,10 @@ function matchesCustomerSearch(order) {
   return !search || String(order.customerName || '').toLowerCase().includes(search);
 }
 
+function getOrderTotal(order) {
+  return Number(order.totalRevenue || 0) + Number(order.shippingFee || 0);
+}
+
 function showBill(orderId) {
   const order = state.orders.find((entry) => entry.id === orderId);
   if (!order) return;
@@ -738,7 +804,8 @@ function showBill(orderId) {
       </thead>
       <tbody>${itemRows}</tbody>
     </table>
-    <div class="bill-total"><span>Tổng cộng</span><strong>${moneyFormatter.format(order.totalRevenue)}</strong></div>
+    <div class="bill-shipping"><span>Phí ship</span><strong>${moneyFormatter.format(order.shippingFee || 0)}</strong></div>
+    <div class="bill-total"><span>Tổng cộng</span><strong>${moneyFormatter.format(getOrderTotal(order))}</strong></div>
     <div class="bill-qr">
       <p>Mã QR chuyển khoản</p>
       <img src="./bank.jpg" alt="Mã QR chuyển khoản Bếp Nhà Mía" />
@@ -924,11 +991,16 @@ function createBillCanvas(order, qrImage) {
     y += 12;
   });
 
-  y = writeText('Tổng cộng', padding, y + 24, contentWidth / 2, 'bold 26px Arial', '#111827', 'left', 34);
+  y = writeText('Phí ship', padding, y + 20, contentWidth / 2, '22px Arial', '#475569', 'left', 30);
+  context.textAlign = 'right';
+  context.font = '22px Arial';
+  context.fillStyle = '#111827';
+  context.fillText(moneyFormatter.format(order.shippingFee || 0), amountX, y - 30);
+  y = writeText('Tổng cộng', padding, y + 18, contentWidth / 2, 'bold 26px Arial', '#111827', 'left', 34);
   context.textAlign = 'right';
   context.font = 'bold 28px Arial';
   context.fillStyle = '#111827';
-  context.fillText(moneyFormatter.format(order.totalRevenue), amountX, y - 34);
+  context.fillText(moneyFormatter.format(getOrderTotal(order)), amountX, y - 34);
   y += 14;
   drawRule();
   y = writeText('Mã QR chuyển khoản', width / 2, y + 18, contentWidth, 'bold 24px Arial', '#111827', 'center', 32);
@@ -985,6 +1057,7 @@ function editOrder(orderId) {
   el.pickupName.value = order.customerName;
   el.pickupTime.value = order.pickupTime ? toLocalDateTimeInputValue(new Date(order.pickupTime)) : '';
   el.transferPaid.value = String(isTransferPaid(order));
+  el.shippingFee.value = Number(order.shippingFee || 0);
   el.orderNotes.value = order.notes || '';
   el.orderFormTitle.textContent = 'Chỉnh sửa note bán hàng';
   el.orderForm.querySelector('button[type="submit"]').textContent = 'Cập nhật note';
