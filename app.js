@@ -100,7 +100,7 @@ async function loadData() {
     console.error(error);
     if (config.useGoogleSheets) {
       config.useGoogleSheets = false;
-      showToast('Google Sheets bị chặn bởi CORS/OAuth trên localhost. Chuyển sang lưu local.');
+      showToast('Không thể kết nối Google Sheets. Đang dùng dữ liệu lưu trên thiết bị này.');
     }
 
     const saved = localStorage.getItem('order-notes-demo');
@@ -483,9 +483,8 @@ async function callSheetAction(action, payload = {}) {
 
   const response = await fetch(config.scriptUrl, {
     method: 'POST',
-    mode: 'cors',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'text/plain;charset=utf-8'
     },
     body: JSON.stringify({ action, payload })
   });

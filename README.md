@@ -90,6 +90,13 @@ window.ORDER_NOTES_CONFIG = {
 - Tạo món hàng và note bán hàng
 - Kiểm tra Google Sheet để xem dữ liệu được lưu đúng
 
+### Khắc phục lỗi kết nối
+
+- Đảm bảo web app được deploy với quyền truy cập **Anyone** và `scriptUrl` là URL `/exec`.
+- Frontend gửi JSON với `Content-Type: text/plain` để tránh yêu cầu CORS preflight; Apps Script vẫn đọc nội dung JSON như bình thường.
+- Nếu vừa cập nhật Apps Script, hãy tạo deployment version mới rồi kiểm tra lại.
+- Nếu kết nối thất bại, ứng dụng sẽ chuyển sang `localStorage` trên thiết bị hiện tại; dữ liệu đó không tự đồng bộ lên Google Sheets.
+
 ## Lưu ý
 
 - Nếu không cấu hình `scriptUrl`, ứng dụng sẽ chạy ở chế độ demo bằng `localStorage` trong browser.
