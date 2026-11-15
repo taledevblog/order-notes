@@ -137,7 +137,7 @@ function hydrateDateInputs() {
   const today = new Date();
   const iso = toLocalDateTimeInputValue(today);
   el.pickupTime.value = iso;
-  el.statsDate.value = today.toISOString().slice(0, 10);
+  el.statsDate.value = formatLocalDate(today);
   updateStatsInputType();
 }
 
@@ -797,7 +797,13 @@ function matchesOrderDate(order) {
 }
 
 function getDateTimezoneOffset(dateValue) {
-  return dateValue ? new Date(`${dateValue}T12:00:00`).getTimezoneOffset() : 0;
+  if (!dateValue) return 0;
+  const datePart = /^\d{4}$/.test(dateValue)
+    ? `${dateValue}-01-01`
+    : /^\d{4}-\d{2}$/.test(dateValue)
+      ? `${dateValue}-01`
+      : dateValue;
+  return new Date(`${datePart}T12:00:00`).getTimezoneOffset();
 }
 
 function formatLocalDate(date) {
@@ -1143,7 +1149,11 @@ async function renderStats() {
   if (state.ordersFromSheets) {
     await beginBusy('Đang tải thống kê...');
     try {
-      const response = await callSheetAction('getStats', { range, value: filterValue });
+      const response = await callSheetAction('getStats', {
+        range,
+        value: filterValue,
+        dateTimezoneOffsetMinutes: getDateTimezoneOffset(filterValue)
+      });
       renderStatsSummary(response.data || {});
     } catch (error) {
       console.error(error);
@@ -1154,7 +1164,7 @@ async function renderStats() {
     return;
   }
 
-  const filteredOrders = state.orders.filter((order) => matchesRange(order.orderedAt, range, filterValue));
+  const filteredOrders = state.orders.filter((order) => matchesRange(order.pickupTime, range, filterValue));
 
   const totalRevenue = filteredOrders.reduce((sum, order) => sum + Number(order.totalRevenue || 0), 0);
   const totalCost = filteredOrders.reduce((sum, order) => sum + Number(order.totalCost || 0), 0);
@@ -1249,7 +1259,7 @@ function matchesRange(dateValue, range, filterValue) {
   if (!filterValue) return true;
 
   if (range === 'day') {
-    return date.toISOString().slice(0, 10) === filterValue;
+    return formatLocalDate(date) === filterValue;
   }
 
   if (range === 'month') {

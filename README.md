@@ -21,7 +21,7 @@ Một web app đơn giản để quản lý món hàng và ghi note bán hàng, 
   - Hiển thị thời gian lấy hàng trên note và lọc theo cùng ngày lấy (`pickupTime`); ngày tạo note chỉ dùng để xếp note mới tạo lên trước
   - Đánh dấu đã/chưa chuyển khoản, lọc, chỉnh sửa, xóa note (có xác nhận), phân trang phía máy chủ (chỉ tải 10 note mỗi lần) và xem/tải bill kèm mã QR
 - Màn hình 3: thống kê
-  - Theo ngày / tháng / năm
+  - Theo ngày / tháng / năm lấy hàng (`pickupTime`)
   - Doanh thu
   - Lợi nhuận
   - Chi phí

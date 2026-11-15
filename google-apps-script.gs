@@ -237,22 +237,22 @@ function getStats_(filter = {}) {
   const orders = listOrders_();
   const range = filter.range || 'day';
   const filterValue = filter.value || '';
+  const timezoneOffset = Number(filter.dateTimezoneOffsetMinutes) || 0;
 
   const filtered = orders.filter((order) => {
-    if (!order.orderedAt) return false;
-    const date = new Date(order.orderedAt);
+    const pickupDate = pickupDate_(order.pickupTime, timezoneOffset);
+    if (!pickupDate) return false;
     if (!filterValue) return true;
 
     if (range === 'day') {
-      return date.toISOString().slice(0, 10) === filterValue;
+      return pickupDate === filterValue;
     }
 
     if (range === 'month') {
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      return monthKey === filterValue;
+      return pickupDate.slice(0, 7) === filterValue;
     }
 
-    return date.getFullYear() === Number(filterValue);
+    return Number(pickupDate.slice(0, 4)) === Number(filterValue);
   });
 
   const totals = filtered.reduce(
