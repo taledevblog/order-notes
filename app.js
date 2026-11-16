@@ -70,6 +70,7 @@ function cacheElements() {
   el.ordersNext = document.getElementById('orders-next');
   el.ordersPageInfo = document.getElementById('orders-page-info');
   el.syncButton = document.getElementById('sync-btn');
+  el.exportCsvButton = document.getElementById('export-csv-btn');
   el.toasts = document.getElementById('toast');
   el.loadingOverlay = document.getElementById('loading-overlay');
   el.loadingMessage = document.getElementById('loading-message');
@@ -80,6 +81,7 @@ function cacheElements() {
   el.statProfit = document.getElementById('stat-profit');
   el.statCost = document.getElementById('stat-cost');
   el.statOrders = document.getElementById('stat-orders');
+  el.statPaidAmount = document.getElementById('stat-paid-amount');
   el.statUnpaidAmount = document.getElementById('stat-unpaid-amount');
   el.itemStatsChart = document.getElementById('item-stats-chart');
   el.customerStatsChart = document.getElementById('customer-stats-chart');
@@ -103,6 +105,7 @@ function bindEvents() {
   el.cancelOrderEdit.addEventListener('click', cancelOrderEdit);
   el.addOrderItem.addEventListener('click', addOrderItemToCart);
   el.syncButton.addEventListener('click', loadData);
+  el.exportCsvButton.addEventListener('click', exportCsvData);
   el.paymentFilter.addEventListener('change', () => {
     if (state.ordersFromSheets) {
       loadOrdersPage(1);
@@ -272,6 +275,73 @@ function endBusy() {
 function persistLocalDemoData() {
   if (state.ordersFromSheets) return;
   localStorage.setItem('order-notes-demo', JSON.stringify({ items: state.items, orders: state.orders }));
+}
+
+async function exportCsvData() {
+  await beginBusy('Đang chuẩn bị dữ liệu xuất...');
+  try {
+    let items = state.items;
+    let orders = state.orders;
+    if (state.ordersFromSheets) {
+      const [itemsResponse, ordersResponse] = await Promise.all([
+        callSheetAction('listItems'),
+        callSheetAction('listOrders')
+      ]);
+      if (!Array.isArray(itemsResponse.data) || !Array.isArray(ordersResponse.data)) {
+        throw new Error('Dữ liệu xuất từ Google Sheets không hợp lệ.');
+      }
+      items = itemsResponse.data;
+      orders = ordersResponse.data;
+    }
+
+    const date = formatLocalDate(new Date());
+    downloadCsv(`order-notes-orders-${date}.csv`, [
+      ['Mã đơn', 'Tên khách hàng', 'Thời gian lấy', 'Thời gian tạo', 'Món hàng (JSON)',
+        'Doanh thu', 'Giá vốn', 'Lợi nhuận', 'Đã chuyển khoản', 'Thời điểm thanh toán', 'Ghi chú', 'Phí ship'],
+      ...orders.map((order) => [
+        order.id,
+        order.customerName,
+        order.pickupTime,
+        order.orderedAt,
+        JSON.stringify(order.items || []),
+        order.totalRevenue,
+        order.totalCost,
+        order.profit,
+        isTransferPaid(order) ? 'Có' : 'Không',
+        order.paidAt || '',
+        order.notes || '',
+        order.shippingFee || 0
+      ])
+    ]);
+    downloadCsv(`order-notes-items-${date}.csv`, [
+      ['Mã món', 'Tên món', 'Giá bán', 'Giá vốn'],
+      ...items.map((item) => [item.id, item.name, item.sellingPrice, item.cost])
+    ]);
+    showToast('Đã xuất danh sách đơn hàng và món hàng dạng CSV.');
+  } catch (error) {
+    console.error(error);
+    showToast('Không thể xuất dữ liệu CSV.');
+  } finally {
+    endBusy();
+  }
+}
+
+function downloadCsv(filename, rows) {
+  const csv = `\uFEFF${rows.map((row) => row.map((value) => {
+    const text = value == null ? '' : String(value);
+    const safeText = typeof value === 'string' && /^[\s]*[=+\-@]/.test(text)
+      ? `'${text}`
+      : text;
+    return `"${safeText.replace(/"/g, '""')}"`;
+  }).join(',')).join('\r\n')}`;
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function saveItem(event) {
@@ -552,12 +622,22 @@ async function saveOrder(event) {
   }
 
   const previousOrder = state.orders.find((entry) => entry.id === state.editingOrderId);
+  const transferPaid = el.transferPaid.value === 'true';
+  let paidAt = '';
+  if (transferPaid) {
+    if (previousOrder && previousOrder.paidAt) {
+      paidAt = previousOrder.paidAt;
+    } else if (!previousOrder || !isTransferPaid(previousOrder)) {
+      paidAt = new Date().toISOString();
+    }
+  }
   const order = {
     id: state.editingOrderId || `order-${Date.now()}`,
     customerName,
     pickupTime: el.pickupTime.value || new Date().toISOString(),
     orderedAt: previousOrder ? previousOrder.orderedAt : new Date().toISOString(),
-    transferPaid: el.transferPaid.value === 'true',
+    transferPaid,
+    paidAt,
     shippingFee: Number(el.shippingFee.value || 0),
     notes: el.orderNotes.value.trim(),
     items: state.cart.map((item) => ({
@@ -692,6 +772,46 @@ async function deleteOrder(orderId) {
   }
 }
 
+async function markOrderPaid(orderId) {
+  const order = state.orders.find((entry) => entry.id === orderId);
+  if (!order || isTransferPaid(order)) return;
+
+  const wasRemote = state.ordersFromSheets;
+  await beginBusy('Đang cập nhật thanh toán...');
+  try {
+    let refreshFailed = false;
+    if (wasRemote) {
+      const response = await callSheetAction('markOrderPaid', { orderId });
+      if (!response.data || !response.data.updated) {
+        throw new Error('Google Sheets không tìm thấy đơn hàng cần cập nhật.');
+      }
+      order.transferPaid = true;
+      order.paidAt = response.data.paidAt || '';
+      try {
+        await fetchOrdersPage(state.ordersPage);
+      } catch (error) {
+        console.error(error);
+        refreshFailed = true;
+        renderOrdersList();
+      }
+    } else {
+      order.transferPaid = true;
+      order.paidAt = new Date().toISOString();
+      persistLocalDemoData();
+      renderOrdersList();
+    }
+
+    showToast(refreshFailed
+      ? 'Đã đánh dấu thanh toán nhưng chưa làm mới danh sách. Hãy bấm Đồng bộ dữ liệu.'
+      : 'Đã đánh dấu đơn hàng đã chuyển khoản.');
+  } catch (error) {
+    console.error(error);
+    showToast('Không thể cập nhật trạng thái thanh toán.');
+  } finally {
+    endBusy();
+  }
+}
+
 function renderOrdersList() {
   el.ordersList.innerHTML = '';
 
@@ -731,6 +851,10 @@ function renderOrdersList() {
     const pickupDateText = pickupDate && !Number.isNaN(pickupDate.getTime())
       ? `Thời gian lấy: ${formatDisplayDate(pickupDate)}`
       : '';
+    const paidAt = order.paidAt ? new Date(order.paidAt) : null;
+    const paidAtText = paidAt && !Number.isNaN(paidAt.getTime())
+      ? `Đã chuyển khoản lúc: ${formatDisplayDate(paidAt)}`
+      : '';
 
     card.innerHTML = `
       <div class="order-top">
@@ -745,6 +869,7 @@ function renderOrdersList() {
       <div class="order-status ${isTransferPaid(order) ? 'paid' : 'unpaid'}">
         Chuyển khoản: ${isTransferPaid(order) ? 'Đã nhận' : 'Chưa nhận'}
       </div>
+      ${paidAtText ? `<p class="payment-timestamp">${escapeHtml(paidAtText)}</p>` : ''}
       ${order.notes ? `<p class="order-note"><strong>Ghi chú:</strong> ${escapeHtml(order.notes).replace(/\n/g, '<br>')}</p>` : ''}
       <div class="order-items">
         ${order.items
@@ -768,12 +893,15 @@ function renderOrdersList() {
       </div>
       <div class="form-actions order-actions">
         <button class="bill-btn" type="button">Xem bill</button>
+        ${isTransferPaid(order) ? '' : '<button class="mark-paid-btn secondary-btn" type="button">Đánh dấu đã chuyển khoản</button>'}
         <button class="edit-btn" type="button">Sửa note</button>
         <button class="delete-btn" type="button">Xóa note</button>
       </div>
     `;
 
     card.querySelector('.bill-btn').addEventListener('click', () => showBill(order.id));
+    const markPaidButton = card.querySelector('.mark-paid-btn');
+    if (markPaidButton) markPaidButton.addEventListener('click', () => markOrderPaid(order.id));
     card.querySelector('.edit-btn').addEventListener('click', () => editOrder(order.id));
     card.querySelector('.delete-btn').addEventListener('click', () => deleteOrder(order.id));
     el.ordersList.appendChild(card);
@@ -1185,6 +1313,9 @@ async function renderStats() {
   const totalRevenue = filteredOrders.reduce((sum, order) => sum + Number(order.totalRevenue || 0), 0);
   const totalCost = filteredOrders.reduce((sum, order) => sum + Number(order.totalCost || 0), 0);
   const totalProfit = filteredOrders.reduce((sum, order) => sum + Number(order.profit || 0), 0);
+  const paidAmount = filteredOrders.reduce((sum, order) => (
+    isTransferPaid(order) ? sum + getOrderTotal(order) : sum
+  ), 0);
   const unpaidAmount = filteredOrders.reduce((sum, order) => (
     isTransferPaid(order) ? sum : sum + getOrderTotal(order)
   ), 0);
@@ -1194,6 +1325,7 @@ async function renderStats() {
     cost: totalCost,
     profit: totalProfit,
     orders: filteredOrders.length,
+    paidAmount,
     unpaidAmount,
     items: aggregateItemStats(filteredOrders),
     customers: aggregateStats(filteredOrders, (order) => [{
@@ -1208,6 +1340,7 @@ function renderStatsSummary(stats) {
   el.statCost.textContent = moneyFormatter.format(Number(stats.cost || 0));
   el.statProfit.textContent = moneyFormatter.format(Number(stats.profit || 0));
   el.statOrders.textContent = String(Number(stats.orders || 0));
+  el.statPaidAmount.textContent = moneyFormatter.format(Number(stats.paidAmount || 0));
   el.statUnpaidAmount.textContent = moneyFormatter.format(Number(stats.unpaidAmount || 0));
   renderBarChart(el.itemStatsChart, Array.isArray(stats.items) ? stats.items : [], true);
   renderBarChart(el.customerStatsChart, Array.isArray(stats.customers) ? stats.customers : []);

@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Order Notes</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=6" />
+    <link rel="stylesheet" href="styles.css?v=7" />
     <script src="config.js"></script>
-    <script defer src="app.js?v=17"></script>
+    <script defer src="app.js?v=18"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -16,7 +16,10 @@
           <p class="eyebrow">Quản lý bán hàng</p>
           <h1>BẾP NHÀ MÍA</h1>
         </div>
-        <button id="sync-btn" class="ghost-btn" type="button">Đồng bộ dữ liệu</button>
+        <div class="topbar-actions">
+          <button id="export-csv-btn" class="ghost-btn" type="button">Xuất dữ liệu CSV</button>
+          <button id="sync-btn" class="ghost-btn" type="button">Đồng bộ dữ liệu</button>
+        </div>
       </header>
 
       <nav class="tabs" aria-label="Tabs">
@@ -171,7 +174,7 @@
 
         <section id="stats-section" class="tab-pane">
           <div class="panel">
-            <h2>Thống kê bán hàng</h2>
+            <h2>Tổng kết cuối ngày &amp; thống kê bán hàng</h2>
             <div class="filter-row">
               <label>
                 <span>Loại thống kê</span>
@@ -205,8 +208,12 @@
                 <span>Số đơn</span>
                 <strong id="stat-orders">0</strong>
               </div>
+              <div class="stat-card paid">
+                <span>Tiền đã nhận</span>
+                <strong id="stat-paid-amount">0đ</strong>
+              </div>
               <div class="stat-card unpaid">
-                <span>Chưa chuyển khoản</span>
+                <span>Còn phải thu</span>
                 <strong id="stat-unpaid-amount">0đ</strong>
               </div>
             </div>

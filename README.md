@@ -19,14 +19,15 @@ Một web app đơn giản để quản lý món hàng và ghi note bán hàng, 
   - Ghi chú đơn hàng
   - Tìm theo tên khách hàng
   - Hiển thị thời gian lấy hàng trên note và lọc theo cùng ngày lấy (`pickupTime`); ngày tạo note chỉ dùng để xếp note mới tạo lên trước
-  - Đánh dấu đã/chưa chuyển khoản, lọc, chỉnh sửa, xóa note (có xác nhận), phân trang phía máy chủ (chỉ tải 10 note mỗi lần) và xem/tải bill kèm mã QR
+  - Đánh dấu đã/chưa chuyển khoản ngay trên đơn, lưu thời điểm thanh toán, lọc, chỉnh sửa, xóa note (có xác nhận), phân trang phía máy chủ (chỉ tải 10 note mỗi lần) và xem/tải bill kèm mã QR
 - Màn hình 3: thống kê
-  - Theo ngày / tháng / năm lấy hàng (`pickupTime`)
+  - Tổng kết theo ngày / tháng / năm lấy hàng (`pickupTime`), gồm số đơn, doanh thu, tiền đã nhận và còn phải thu
   - Doanh thu
   - Lợi nhuận
   - Chi phí
   - Số đơn hàng
   - Biểu đồ doanh thu theo món và khách hàng
+- Xuất toàn bộ đơn hàng và món hàng thành hai file CSV mở được bằng Excel
 - Hiển thị vòng xoay khi tải hoặc lưu dữ liệu
 
 ## Cấu trúc dự án
@@ -105,7 +106,7 @@ window.ORDER_NOTES_CONFIG = {
 - Frontend gửi JSON với `Content-Type: text/plain` để tránh yêu cầu CORS preflight; Apps Script vẫn đọc nội dung JSON như bình thường.
 - Nếu vừa cập nhật Apps Script, hãy tạo deployment version mới rồi kiểm tra lại.
 - Phân trang note và thống kê phía Google Sheets cần triển khai phiên bản Apps Script mới nhất trong `google-apps-script.gs`.
-- Các cột `notes` và `shippingFee` sẽ được Apps Script tự thêm vào sheet `orders` khi tải danh sách hoặc lưu note.
+- Các cột `notes`, `shippingFee` và `paidAt` sẽ được Apps Script tự thêm vào sheet `orders` khi tải danh sách hoặc lưu note.
 - Nếu kết nối thất bại, ứng dụng sẽ chuyển sang `localStorage` trên thiết bị hiện tại; dữ liệu đó không tự đồng bộ lên Google Sheets.
 
 ## Lưu ý

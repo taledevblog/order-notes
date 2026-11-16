@@ -3,6 +3,12 @@ const SHEET_NAMES = {
   orders: 'orders'
 };
 
+const ORDER_HEADERS = [
+  'id', 'customerName', 'pickupTime', 'orderedAt', 'items',
+  'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes',
+  'shippingFee', 'paidAt'
+];
+
 function ensureSheet_(sheetName) {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = spreadsheet.getSheetByName(sheetName);
@@ -24,9 +30,9 @@ function ensureHeaders_(sheet, headers) {
     return;
   }
 
-  const missingHeaders = headers.filter((header) => !existing[0].includes(header));
+  const missingHeaders = headers.filter((header) => !existing.includes(header));
   if (missingHeaders.length > 0) {
-    sheet.getRange(1, existing[0].length + 1, 1, missingHeaders.length).setValues([missingHeaders]);
+    sheet.getRange(1, existing.length + 1, 1, missingHeaders.length).setValues([missingHeaders]);
   }
 }
 
@@ -51,7 +57,8 @@ function normalizeOrderRow_(row) {
     profit: Number(row[7] || 0),
     transferPaid: isTransferPaid_(row[8]),
     notes: row[9] || '',
-    shippingFee: Number(row[10] || 0)
+    shippingFee: Number(row[10] || 0),
+    paidAt: row[11] || ''
   };
 }
 
@@ -123,21 +130,21 @@ function saveItem_(item) {
 
 function listOrders_() {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
+  ensureHeaders_(sheet, ORDER_HEADERS);
 
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) {
     return [];
   }
 
-  return sheet.getRange(2, 1, lastRow - 1, 11).getValues()
+  return sheet.getRange(2, 1, lastRow - 1, ORDER_HEADERS.length).getValues()
     .filter((row) => row[0] || row[1])
     .map(normalizeOrderRow_);
 }
 
 function listOrdersPage_(filter = {}) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
+  ensureHeaders_(sheet, ORDER_HEADERS);
 
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) {
@@ -145,7 +152,7 @@ function listOrdersPage_(filter = {}) {
     return { orders: [], page: 1, pageSize, total: 0 };
   }
 
-  const values = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, ORDER_HEADERS.length).getValues();
   const customerSearch = String(filter.customerSearch || '').trim().toLowerCase();
   const orderDate = String(filter.orderDate || '').trim();
   const timezoneOffset = Number(filter.dateTimezoneOffsetMinutes) || 0;
@@ -186,7 +193,7 @@ function searchCustomers_(query) {
   if (!search) return [];
 
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
+  ensureHeaders_(sheet, ORDER_HEADERS);
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) return [];
 
@@ -213,7 +220,7 @@ function searchCustomers_(query) {
 
 function saveOrder_(order) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
+  ensureHeaders_(sheet, ORDER_HEADERS);
 
   const row = [
     order.id || Utilities.getUuid(),
@@ -226,7 +233,8 @@ function saveOrder_(order) {
     Number(order.profit || 0),
     Boolean(order.transferPaid),
     String(order.notes || ''),
-    Number(order.shippingFee || 0)
+    Number(order.shippingFee || 0),
+    String(order.paidAt || '')
   ];
 
   const lastRow = sheet.getLastRow();
@@ -244,9 +252,33 @@ function saveOrder_(order) {
   return { ...order, id: row[0] };
 }
 
+function markOrderPaid_(orderId) {
+  const sheet = ensureSheet_(SHEET_NAMES.orders);
+  ensureHeaders_(sheet, ORDER_HEADERS);
+
+  const lastRow = sheet.getLastRow();
+  const existingIds = lastRow > 1
+    ? sheet.getRange(2, 1, lastRow - 1, 1).getValues()
+    : [];
+  const existingIndex = existingIds.findIndex((row) => String(row[0]) === String(orderId));
+  if (existingIndex < 0) return { updated: false };
+
+  const rowNumber = existingIndex + 2;
+  const row = sheet.getRange(rowNumber, 1, 1, ORDER_HEADERS.length).getValues()[0];
+  if (isTransferPaid_(row[8])) {
+    return { updated: true, paidAt: row[11] || '', alreadyPaid: true };
+  }
+
+  const paidAt = new Date().toISOString();
+  row[8] = true;
+  row[11] = paidAt;
+  sheet.getRange(rowNumber, 1, 1, ORDER_HEADERS.length).setValues([row]);
+  return { updated: true, paidAt };
+}
+
 function deleteOrder_(orderId) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
-  ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
+  ensureHeaders_(sheet, ORDER_HEADERS);
 
   const lastRow = sheet.getLastRow();
   const existingIds = lastRow > 1
@@ -289,12 +321,15 @@ function getStats_(filter = {}) {
       summary.cost += Number(order.totalCost || 0);
       summary.profit += Number(order.profit || 0);
       summary.orders += 1;
-      if (!isTransferPaid_(order.transferPaid)) {
-        summary.unpaidAmount += Number(order.totalRevenue || 0) + Number(order.shippingFee || 0);
+      const customerTotal = Number(order.totalRevenue || 0) + Number(order.shippingFee || 0);
+      if (isTransferPaid_(order.transferPaid)) {
+        summary.paidAmount += customerTotal;
+      } else {
+        summary.unpaidAmount += customerTotal;
       }
       return summary;
     },
-    { revenue: 0, cost: 0, profit: 0, orders: 0, unpaidAmount: 0 }
+    { revenue: 0, cost: 0, profit: 0, orders: 0, paidAmount: 0, unpaidAmount: 0 }
   );
 
   const itemTotals = new Map();
@@ -354,6 +389,9 @@ function doPost(e) {
         break;
       case 'saveOrder':
         data = saveOrder_(payload.order || payload);
+        break;
+      case 'markOrderPaid':
+        data = markOrderPaid_(payload.orderId);
         break;
       case 'deleteOrder':
         data = deleteOrder_(payload.orderId);
