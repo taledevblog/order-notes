@@ -473,8 +473,21 @@ th {
   background: var(--primary);
 }
 
-.bar-row strong {
+.bar-values {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+
+.bar-values strong {
   font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.bar-quantity {
+  color: var(--muted);
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 

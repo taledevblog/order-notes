@@ -298,8 +298,11 @@ function getStats_(filter = {}) {
     customerTotals.set(customerName, (customerTotals.get(customerName) || 0) + Number(order.totalRevenue || 0));
     (order.items || []).forEach((item) => {
       const itemName = item.name || 'Chưa rõ';
-      const revenue = Number(item.quantity || 0) * Number(item.sellingPrice || 0);
-      itemTotals.set(itemName, (itemTotals.get(itemName) || 0) + revenue);
+      const total = itemTotals.get(itemName) || { value: 0, quantity: 0 };
+      const quantity = Number(item.quantity || 0);
+      total.value += quantity * Number(item.sellingPrice || 0);
+      total.quantity += quantity;
+      itemTotals.set(itemName, total);
     });
   });
 
@@ -307,10 +310,14 @@ function getStats_(filter = {}) {
     .map(([name, value]) => ({ name, value }))
     .sort((left, right) => right.value - left.value)
     .slice(0, 8);
+  const topItems = [...itemTotals.entries()]
+    .map(([name, total]) => ({ name, ...total }))
+    .sort((left, right) => right.value - left.value)
+    .slice(0, 8);
 
   return {
     ...totals,
-    items: topEntries(itemTotals),
+    items: topItems,
     customers: topEntries(customerTotals)
   };
 }

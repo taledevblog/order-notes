@@ -25,6 +25,10 @@ const moneyFormatter = new Intl.NumberFormat('vi-VN', {
   maximumFractionDigits: 0
 });
 
+const quantityFormatter = new Intl.NumberFormat('vi-VN', {
+  maximumFractionDigits: 2
+});
+
 const el = {};
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1183,10 +1187,7 @@ async function renderStats() {
     cost: totalCost,
     profit: totalProfit,
     orders: filteredOrders.length,
-    items: aggregateStats(filteredOrders, (order) => order.items.map((item) => ({
-      name: item.name,
-      value: Number(item.quantity || 0) * Number(item.sellingPrice || 0)
-    }))),
+    items: aggregateItemStats(filteredOrders),
     customers: aggregateStats(filteredOrders, (order) => [{
       name: order.customerName || 'Chưa rõ',
       value: Number(order.totalRevenue || 0)
@@ -1199,8 +1200,26 @@ function renderStatsSummary(stats) {
   el.statCost.textContent = moneyFormatter.format(Number(stats.cost || 0));
   el.statProfit.textContent = moneyFormatter.format(Number(stats.profit || 0));
   el.statOrders.textContent = String(Number(stats.orders || 0));
-  renderBarChart(el.itemStatsChart, Array.isArray(stats.items) ? stats.items : []);
+  renderBarChart(el.itemStatsChart, Array.isArray(stats.items) ? stats.items : [], true);
   renderBarChart(el.customerStatsChart, Array.isArray(stats.customers) ? stats.customers : []);
+}
+
+function aggregateItemStats(orders) {
+  const totals = new Map();
+  orders.forEach((order) => {
+    (order.items || []).forEach((item) => {
+      const name = item.name || 'Chưa rõ';
+      const quantity = Number(item.quantity || 0);
+      const total = totals.get(name) || { value: 0, quantity: 0 };
+      total.value += quantity * Number(item.sellingPrice || 0);
+      total.quantity += quantity;
+      totals.set(name, total);
+    });
+  });
+  return [...totals.entries()]
+    .map(([name, total]) => ({ name, ...total }))
+    .sort((left, right) => right.value - left.value)
+    .slice(0, 8);
 }
 
 function aggregateStats(orders, getEntries) {
@@ -1216,7 +1235,7 @@ function aggregateStats(orders, getEntries) {
     .slice(0, 8);
 }
 
-function renderBarChart(container, entries) {
+function renderBarChart(container, entries, showQuantity = false) {
   container.innerHTML = '';
   if (entries.length === 0) {
     container.innerHTML = '<p>Chưa có dữ liệu trong khoảng thời gian này.</p>';
@@ -1224,7 +1243,7 @@ function renderBarChart(container, entries) {
   }
 
   const maxValue = entries[0].value || 1;
-  entries.forEach(({ name, value }) => {
+  entries.forEach(({ name, value, quantity }) => {
     const row = document.createElement('div');
     row.className = 'bar-row';
     const label = document.createElement('div');
@@ -1235,11 +1254,20 @@ function renderBarChart(container, entries) {
     const bar = document.createElement('div');
     bar.className = 'bar-fill';
     bar.style.width = `${Math.max((value / maxValue) * 100, 2)}%`;
-    bar.setAttribute('aria-label', `${name}: ${moneyFormatter.format(value)}`);
+    bar.setAttribute('aria-label', `${name}: ${moneyFormatter.format(value)}${showQuantity ? `, đã bán ${quantityFormatter.format(Number(quantity || 0))} món` : ''}`);
     track.appendChild(bar);
+    const values = document.createElement('div');
+    values.className = 'bar-values';
     const amount = document.createElement('strong');
     amount.textContent = moneyFormatter.format(value);
-    row.append(label, track, amount);
+    values.appendChild(amount);
+    if (showQuantity) {
+      const quantityLabel = document.createElement('small');
+      quantityLabel.className = 'bar-quantity';
+      quantityLabel.textContent = `Đã bán ${quantityFormatter.format(Number(quantity || 0))} món`;
+      values.appendChild(quantityLabel);
+    }
+    row.append(label, track, values);
     container.appendChild(row);
   });
 }
