@@ -80,6 +80,7 @@ function cacheElements() {
   el.statProfit = document.getElementById('stat-profit');
   el.statCost = document.getElementById('stat-cost');
   el.statOrders = document.getElementById('stat-orders');
+  el.statUnpaidAmount = document.getElementById('stat-unpaid-amount');
   el.itemStatsChart = document.getElementById('item-stats-chart');
   el.customerStatsChart = document.getElementById('customer-stats-chart');
   el.billModal = document.getElementById('bill-modal');
@@ -1184,12 +1185,16 @@ async function renderStats() {
   const totalRevenue = filteredOrders.reduce((sum, order) => sum + Number(order.totalRevenue || 0), 0);
   const totalCost = filteredOrders.reduce((sum, order) => sum + Number(order.totalCost || 0), 0);
   const totalProfit = filteredOrders.reduce((sum, order) => sum + Number(order.profit || 0), 0);
+  const unpaidAmount = filteredOrders.reduce((sum, order) => (
+    isTransferPaid(order) ? sum : sum + getOrderTotal(order)
+  ), 0);
 
   renderStatsSummary({
     revenue: totalRevenue,
     cost: totalCost,
     profit: totalProfit,
     orders: filteredOrders.length,
+    unpaidAmount,
     items: aggregateItemStats(filteredOrders),
     customers: aggregateStats(filteredOrders, (order) => [{
       name: order.customerName || 'Chưa rõ',
@@ -1203,6 +1208,7 @@ function renderStatsSummary(stats) {
   el.statCost.textContent = moneyFormatter.format(Number(stats.cost || 0));
   el.statProfit.textContent = moneyFormatter.format(Number(stats.profit || 0));
   el.statOrders.textContent = String(Number(stats.orders || 0));
+  el.statUnpaidAmount.textContent = moneyFormatter.format(Number(stats.unpaidAmount || 0));
   renderBarChart(el.itemStatsChart, Array.isArray(stats.items) ? stats.items : [], true);
   renderBarChart(el.customerStatsChart, Array.isArray(stats.customers) ? stats.customers : []);
 }

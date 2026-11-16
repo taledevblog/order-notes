@@ -289,9 +289,12 @@ function getStats_(filter = {}) {
       summary.cost += Number(order.totalCost || 0);
       summary.profit += Number(order.profit || 0);
       summary.orders += 1;
+      if (!isTransferPaid_(order.transferPaid)) {
+        summary.unpaidAmount += Number(order.totalRevenue || 0) + Number(order.shippingFee || 0);
+      }
       return summary;
     },
-    { revenue: 0, cost: 0, profit: 0, orders: 0 }
+    { revenue: 0, cost: 0, profit: 0, orders: 0, unpaidAmount: 0 }
   );
 
   const itemTotals = new Map();
