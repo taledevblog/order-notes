@@ -1,7 +1,7 @@
 window.ORDER_NOTES_CONFIG = {
   appName: 'Order Notes',
   useGoogleSheets: true,
-  scriptUrl: 'https://script.google.com/macros/s/AKfycbz3xBYp0JzhjqxuDsHf5inuxqBlxUcNyG5CCwwvO5ulke5cflpDuhttuk67Zrm9Drqdtw/exec',
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbyV-ProSmgTNjAPvD0VHCYzfsltYStGlGS74PlaCWj9i_klY6R605egq5gSfUlcU34Pig/exec',
   itemSheet: 'items',
   orderSheet: 'orders'
 };
