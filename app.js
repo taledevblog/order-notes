@@ -573,13 +573,26 @@ async function saveOrder(event) {
   try {
     let listRefreshFailed = false;
     if (wasRemote) {
-      await callSheetAction('saveOrder', { order });
-      const targetPage = state.editingOrderId ? state.ordersPage : 1;
-      try {
-        await fetchOrdersPage(targetPage);
-      } catch (error) {
-        console.error(error);
-        listRefreshFailed = true;
+      const saveResponse = await callSheetAction('saveOrder', { order });
+      if (!wasEditing && !state.customerSearchQuery && !state.ordersDateQuery && el.paymentFilter.value === 'all') {
+        const savedOrder = saveResponse.data || order;
+        state.orders = [savedOrder, ...state.orders.filter((entry) => entry.id !== savedOrder.id)]
+          .sort((left, right) => (
+            (Date.parse(right.orderedAt || '') || 0) - (Date.parse(left.orderedAt || '') || 0) ||
+            String(right.id).localeCompare(String(left.id))
+          ))
+          .slice(0, ORDERS_PER_PAGE);
+        state.ordersTotal += 1;
+        state.ordersPage = 1;
+        renderOrdersList();
+      } else {
+        const targetPage = wasEditing ? state.ordersPage : 1;
+        try {
+          await fetchOrdersPage(targetPage);
+        } catch (error) {
+          console.error(error);
+          listRefreshFailed = true;
+        }
       }
     } else {
       const existingIndex = state.orders.findIndex((entry) => entry.id === order.id);

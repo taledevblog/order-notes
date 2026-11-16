@@ -15,8 +15,11 @@ function ensureSheet_(sheetName) {
 }
 
 function ensureHeaders_(sheet, headers) {
-  const existing = sheet.getDataRange().getValues();
-  if (existing.length === 0 || existing[0].every((value) => value === '')) {
+  const lastColumn = sheet.getLastColumn();
+  const existing = lastColumn > 0
+    ? sheet.getRange(1, 1, 1, lastColumn).getValues()[0]
+    : [];
+  if (sheet.getLastRow() === 0 || existing.every((value) => value === '')) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     return;
   }
@@ -82,12 +85,14 @@ function listItems_() {
   const sheet = ensureSheet_(SHEET_NAMES.items);
   ensureHeaders_(sheet, ['id', 'name', 'sellingPrice', 'cost']);
 
-  const values = sheet.getDataRange().getValues();
-  if (values.length <= 1) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
     return [];
   }
 
-  return values.slice(1).filter((row) => row[0] || row[1]).map(normalizeItemRow_);
+  return sheet.getRange(2, 1, lastRow - 1, 4).getValues()
+    .filter((row) => row[0] || row[1])
+    .map(normalizeItemRow_);
 }
 
 function saveItem_(item) {
@@ -101,11 +106,14 @@ function saveItem_(item) {
     Number(item.cost || 0)
   ];
 
-  const values = sheet.getDataRange().getValues();
-  const existingIndex = values.findIndex((existingRow) => String(existingRow[0]) === String(item.id));
+  const lastRow = sheet.getLastRow();
+  const existingIds = lastRow > 1
+    ? sheet.getRange(2, 1, lastRow - 1, 1).getValues()
+    : [];
+  const existingIndex = existingIds.findIndex((existingRow) => String(existingRow[0]) === String(item.id));
 
   if (existingIndex >= 0) {
-    sheet.getRange(existingIndex + 1, 1, 1, row.length).setValues([row]);
+    sheet.getRange(existingIndex + 2, 1, 1, row.length).setValues([row]);
     return { id: row[0], ...item };
   }
 
@@ -117,24 +125,32 @@ function listOrders_() {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
   ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
 
-  const values = sheet.getDataRange().getValues();
-  if (values.length <= 1) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
     return [];
   }
 
-  return values.slice(1).filter((row) => row[0] || row[1]).map(normalizeOrderRow_);
+  return sheet.getRange(2, 1, lastRow - 1, 11).getValues()
+    .filter((row) => row[0] || row[1])
+    .map(normalizeOrderRow_);
 }
 
 function listOrdersPage_(filter = {}) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
   ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
 
-  const values = sheet.getDataRange().getValues();
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    const pageSize = Math.min(10, Math.max(1, Number(filter.pageSize) || 10));
+    return { orders: [], page: 1, pageSize, total: 0 };
+  }
+
+  const values = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
   const customerSearch = String(filter.customerSearch || '').trim().toLowerCase();
   const orderDate = String(filter.orderDate || '').trim();
   const timezoneOffset = Number(filter.dateTimezoneOffsetMinutes) || 0;
   const paymentFilter = filter.paymentFilter || 'all';
-  const matchingRows = values.slice(1).filter((row) => {
+  const matchingRows = values.filter((row) => {
     if (!(row[0] || row[1])) return false;
     if (customerSearch && !String(row[1] || '').toLowerCase().includes(customerSearch)) return false;
     if (orderDate && pickupDate_(row[2], timezoneOffset) !== orderDate) return false;
@@ -168,10 +184,13 @@ function searchCustomers_(query) {
 
   const sheet = ensureSheet_(SHEET_NAMES.orders);
   ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
-  const values = sheet.getDataRange().getValues();
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+
+  const values = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
   const customers = new Map();
 
-  values.slice(1).forEach((row) => {
+  values.forEach((row) => {
     const name = String(row[1] || '').trim();
     if (!name || !name.toLowerCase().includes(search)) return;
 
@@ -207,11 +226,14 @@ function saveOrder_(order) {
     Number(order.shippingFee || 0)
   ];
 
-  const values = sheet.getDataRange().getValues();
-  const existingIndex = values.findIndex((existingRow) => String(existingRow[0]) === String(order.id));
+  const lastRow = sheet.getLastRow();
+  const existingIds = lastRow > 1
+    ? sheet.getRange(2, 1, lastRow - 1, 1).getValues()
+    : [];
+  const existingIndex = existingIds.findIndex((existingRow) => String(existingRow[0]) === String(order.id));
 
   if (existingIndex >= 0) {
-    sheet.getRange(existingIndex + 1, 1, 1, row.length).setValues([row]);
+    sheet.getRange(existingIndex + 2, 1, 1, row.length).setValues([row]);
     return { ...order, id: row[0] };
   }
 
@@ -223,13 +245,16 @@ function deleteOrder_(orderId) {
   const sheet = ensureSheet_(SHEET_NAMES.orders);
   ensureHeaders_(sheet, ['id', 'customerName', 'pickupTime', 'orderedAt', 'items', 'totalRevenue', 'totalCost', 'profit', 'transferPaid', 'notes', 'shippingFee']);
 
-  const values = sheet.getDataRange().getValues();
-  const existingIndex = values.findIndex((row, index) => index > 0 && String(row[0]) === String(orderId));
-  if (existingIndex < 1) {
+  const lastRow = sheet.getLastRow();
+  const existingIds = lastRow > 1
+    ? sheet.getRange(2, 1, lastRow - 1, 1).getValues()
+    : [];
+  const existingIndex = existingIds.findIndex((row) => String(row[0]) === String(orderId));
+  if (existingIndex < 0) {
     return { deleted: false };
   }
 
-  sheet.deleteRow(existingIndex + 1);
+  sheet.deleteRow(existingIndex + 2);
   return { deleted: true };
 }
 
