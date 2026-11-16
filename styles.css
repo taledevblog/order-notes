@@ -368,8 +368,7 @@ th {
   color: #b45309;
 }
 
-.order-note,
-.bill-note {
+.order-note {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }

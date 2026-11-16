@@ -856,7 +856,6 @@ function showBill(orderId) {
     </header>
     <div class="bill-customer"><span>Khách hàng</span><strong>${escapeHtml(order.customerName)}</strong></div>
     ${pickupTime ? `<p class="bill-meta">Thời gian: ${pickupTime}</p>` : ''}
-    ${order.notes ? `<p class="bill-note"><strong>Ghi chú:</strong> ${escapeHtml(order.notes).replace(/\n/g, '<br>')}</p>` : ''}
     <table class="bill-table">
       <thead>
         <tr><th>#</th><th>Món</th><th>SL</th><th>Thành tiền</th></tr>
@@ -990,10 +989,6 @@ function createBillCanvas(order, qrImage) {
 
   const pickupTime = order.pickupTime ? formatBillDate(order.pickupTime) : '';
   if (pickupTime) y = writeText(`Thời gian: ${pickupTime}`, padding, y + 4, contentWidth, '20px Arial', '#475569', 'left', 28);
-  if (order.notes) {
-    y = writeText('Ghi chú', padding, y + 4, contentWidth, 'bold 20px Arial', '#475569', 'left', 28);
-    y = writeText(order.notes, padding, y, contentWidth, '20px Arial', '#111827', 'left', 28);
-  }
   y += 8;
   drawRule();
 
