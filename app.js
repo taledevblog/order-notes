@@ -803,7 +803,10 @@ function matchesPaymentFilter(order) {
 
 function matchesCustomerSearch(order) {
   const search = state.customerSearchQuery.toLowerCase();
-  return !search || String(order.customerName || '').toLowerCase().includes(search);
+  return !search || (
+    String(order.customerName || '').toLowerCase().includes(search) ||
+    String(order.notes || '').toLowerCase().includes(search)
+  );
 }
 
 function matchesOrderDate(order) {

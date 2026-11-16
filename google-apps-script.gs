@@ -152,7 +152,10 @@ function listOrdersPage_(filter = {}) {
   const paymentFilter = filter.paymentFilter || 'all';
   const matchingRows = values.filter((row) => {
     if (!(row[0] || row[1])) return false;
-    if (customerSearch && !String(row[1] || '').toLowerCase().includes(customerSearch)) return false;
+    if (customerSearch && !(
+      String(row[1] || '').toLowerCase().includes(customerSearch) ||
+      String(row[9] || '').toLowerCase().includes(customerSearch)
+    )) return false;
     if (orderDate && pickupDate_(row[2], timezoneOffset) !== orderDate) return false;
     if (paymentFilter === 'paid') return isTransferPaid_(row[8]);
     if (paymentFilter === 'unpaid') return !isTransferPaid_(row[8]);
